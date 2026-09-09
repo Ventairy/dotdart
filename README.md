@@ -167,6 +167,11 @@ Supported trim paths preserve animated start, end, and offset values in the
 default drawing direction, including parallel and sequential handling when one
 shape group contains multiple paths.
 
+SVG transforms include `translate()`, `scale()`, `rotate()`, `matrix()`,
+`skewX()`, and `skewY()` on groups, drawable shapes, and shapes inside clip
+paths. Matrix and skew calculations happen at build time, and generated
+painters reuse cached matrix data.
+
 Supported SVG colors remain direct optional parameters on their generated
 accessors. A drawable `id` names its colors; otherwise dotdart uses the nearest
 ancestor group `id`. For example, `id="outline"` produces `outlineColor`.

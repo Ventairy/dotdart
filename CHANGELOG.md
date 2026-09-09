@@ -1,3 +1,11 @@
+## 0.11.1
+
+- Added SVG `matrix()`, `skewX()`, and `skewY()` transforms on groups,
+  drawable shapes, and shapes inside clip paths. Matrix and skew calculations
+  happen at build time, with cached matrix data in generated painters.
+- Malformed SVG transform syntax, invalid argument counts, non-finite values,
+  and undefined skew angles now produce explicit build errors.
+
 ## 0.11.0
 
 - Generated assets now import Flutter widgets instead of Material.

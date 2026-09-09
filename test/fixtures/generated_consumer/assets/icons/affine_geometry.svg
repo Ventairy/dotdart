@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Original test geometry; first transform reproduces the reported coefficients. -->
+  <g transform="matrix(0.765256464 0 0 0.765256464 2.730063589 2.347435357)">
+    <rect width="10" height="10"/>
+  </g>
+  <rect x="0" y="2" width="8" height="8" transform="translate(30 0) skewX(45)"/>
+  <rect x="2" y="0" width="8" height="8" transform="translate(60 0) skewY(45)"/>
+  <g transform="translate(0 30) matrix(2 0 0 2 0 0)">
+    <rect x="2" y="2" width="4" height="4" transform="skewX(45)"/>
+  </g>
+  <path d="M2 4L10 4" fill="none" stroke="black" stroke-width="2"
+    transform="translate(30 30) matrix(2 0 1 1 0 0)"/>
+  <defs>
+    <clipPath id="clip"><g transform="translate(2 2)">
+      <rect width="8" height="8" transform="skewX(45)"/>
+    </g></clipPath>
+  </defs>
+  <rect width="20" height="20" clip-path="url(#clip)" transform="matrix(1 0 0 1 60 30)"/>
+  <rect x="2" y="2" width="6" height="6" transform="translate(0 60) matrix(-1 0 0 1 20 0)"/>
+  <rect width="10" height="10" transform="translate(30 60) matrix(0 0 0 1 0 0)"/>
+</svg>

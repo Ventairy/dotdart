@@ -7,6 +7,57 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgGenerator', () {
+    test('when generating a matrix group, it should cache precise column-major values outside paint', () {
+      final document = SvgParser.parse('''
+<svg viewBox="0 0 20 20">
+        <g transform="matrix(0.765256464 0 0 0.765256464 2.730063589 2.347435357)">
+          <rect width="10" height="10"/>
+        </g></svg>''').document;
+      final code = SvgGenerator(document, 'assets/icons/matrix.svg').generateWidgetClass();
+      expect(
+        code,
+        allOf(
+          contains(
+            'static final Float64List _transform0 = Float64List.fromList([0.765256464, 0.0, 0.0, 0.0, 0.0, 0.765256464, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.730063589, 2.347435357, 0.0, 1.0])',
+          ),
+          contains('canvas.transform(_transform0);'),
+          isNot(matches(r'void paint[\s\S]*Float64List.fromList')),
+        ),
+      );
+    });
+
+    test('when generating nested matrix scopes, it should restore before drawing a sibling', () {
+      final document = SvgParser.parse('''
+<svg viewBox="0 0 20 20">
+        <g transform="skewX(45)"><rect width="2" height="2" transform="skewY(45)"/></g>
+        <rect width="1" height="1"/></svg>''').document;
+      final code = SvgGenerator(document, 'assets/icons/nested.svg').generateWidgetClass();
+      expect(
+        code,
+        matches(
+          r'canvas.transform\(_transform0\);[\s\S]*canvas.transform\(_transform1\);[\s\S]*canvas.restore\(\);\s*canvas.restore\(\);\s*canvas.drawRect\(_rect1',
+        ),
+      );
+    });
+
+    test('when generating a matrix clip, it should compose inherited transforms before clipping', () {
+      final document = SvgParser.parse('''
+<svg viewBox="0 0 20 20"><defs>
+        <clipPath id="clip"><g transform="translate(10 20)">
+          <rect width="2" height="2" transform="matrix(2 0 0 3 4 5)"/>
+        </g></clipPath></defs><rect width="20" height="20" clip-path="url(#clip)"/></svg>''').document;
+      final generator = SvgGenerator(document, 'assets/icons/clip.svg');
+      expect(
+        [generator.requiresTypedData, generator.generateWidgetClass()],
+        [
+          true,
+          contains(
+            'matrix4: Float64List.fromList([2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 14.0, 25.0, 0.0, 1.0])',
+          ),
+        ],
+      );
+    });
+
     test('when generating code from a path SVG, it should produce valid Dart', () {
       const doc = SvgDocument(
         viewBox: SvgViewBox(minX: 0, minY: 0, width: 24, height: 24),

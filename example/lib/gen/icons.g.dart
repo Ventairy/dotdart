@@ -8,6 +8,7 @@
 // ignore_for_file: cascade_invocations, unused_element, unused_element_parameter
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/widgets.dart';
 
@@ -86,6 +87,9 @@ mixin _DotdartSvgSizing on StatelessWidget {
 /// Call a method named after each asset to render it:
 ///
 /// ```dart
+/// $Icons.affineGeometry(<params>);
+/// ```
+/// ```dart
 /// $Icons.cross(<params>);
 /// ```
 /// ```dart
@@ -93,6 +97,21 @@ mixin _DotdartSvgSizing on StatelessWidget {
 /// ```
 abstract final class $Icons {
   $Icons._();
+
+  /// Builds the `AffineGeometry` widget from `affineGeometry.svg`.
+  static Widget affineGeometry({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    Color? color1,
+  }) => _AffineGeometry(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    color1: color1,
+  );
 
   /// Builds the `Cross` widget from `cross.svg`.
   static Widget cross({
@@ -141,10 +160,364 @@ abstract final class $Icons {
     double? width,
     double? height,
   }) => switch (fileName) {
+    'affine_geometry.svg' => affineGeometry(
+      key: key,
+      width: width,
+      height: height,
+    ),
     'cross.svg' => cross(key: key, width: width, height: height),
     'nested_groups.svg' => nestedGroups(key: key, width: width, height: height),
     _ => null,
   };
+}
+
+/// A dotdart-generated SVG widget from `assets/icons/affine_geometry.svg`.
+///
+/// Renders a 100.0×100.0 SVG
+/// on a viewBox of 0.0 0.0 100.0 100.0.
+/// No flutter_svg runtime dependency — drawn entirely via [CustomPainter].
+class _AffineGeometry extends StatelessWidget with _DotdartSvgSizing {
+  const _AffineGeometry({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.color1,
+  });
+
+  static const double _svgWidth = 100;
+  static const double _svgHeight = 100;
+  static const double _viewBoxMinX = 0;
+  static const double _viewBoxMinY = 0;
+  static const double _viewBoxWidth = 100;
+  static const double _viewBoxHeight = 100;
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Color 1 — defaults to 0xff000000.
+  final Color? color1;
+
+  @override
+  double? get svgWidgetWidth => width;
+
+  @override
+  double? get svgWidgetHeight => height;
+
+  @override
+  bool get svgMaintainAspectRatio => maintainAspectRatio;
+
+  @override
+  double get svgNativeWidth => _AffineGeometry._svgWidth;
+
+  @override
+  double get svgNativeHeight => _AffineGeometry._svgHeight;
+
+  @override
+  double get svgViewBoxWidth => _AffineGeometry._viewBoxWidth;
+
+  @override
+  double get svgViewBoxHeight => _AffineGeometry._viewBoxHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _AffineGeometryPainter(
+            color1: color1 ?? const Color(0xff000000),
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _AffineGeometryPainter extends CustomPainter {
+  _AffineGeometryPainter({required this.color1});
+
+  final Color color1;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;
+
+  static final Float64List _transform0 = Float64List.fromList([
+    0.765256464,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.765256464,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    2.730063589,
+    2.347435357,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform1 = Float64List.fromList([
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.9999999999999999,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    30.0,
+    0.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform2 = Float64List.fromList([
+    1.0,
+    0.9999999999999999,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    60.0,
+    0.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform3 = Float64List.fromList([
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    30.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform4 = Float64List.fromList([
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.9999999999999999,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform5 = Float64List.fromList([
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    30.0,
+    30.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform6 = Float64List.fromList([
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    60.0,
+    30.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform7 = Float64List.fromList([
+    -1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    20.0,
+    60.0,
+    0.0,
+    1.0,
+  ]);
+  static final Float64List _transform8 = Float64List.fromList([
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    30.0,
+    60.0,
+    0.0,
+    1.0,
+  ]);
+  static const Rect _rect0 = Rect.fromLTWH(0, 0, 10, 10);
+
+  static const Rect _rect1 = Rect.fromLTWH(0, 2, 8, 8);
+
+  static const Rect _rect2 = Rect.fromLTWH(2, 0, 8, 8);
+
+  static const Rect _rect3 = Rect.fromLTWH(2, 2, 4, 4);
+
+  static final Path __path0 = Path()
+    ..moveTo(2, 4)
+    ..lineTo(10, 4);
+
+  static const Rect _rect4 = Rect.fromLTWH(0, 0, 20, 20);
+
+  static const Rect _rect5 = Rect.fromLTWH(2, 2, 6, 6);
+
+  static const Rect _rect6 = Rect.fromLTWH(0, 0, 10, 10);
+
+  static final Path __clip0 = _buildClip0();
+
+  static Path _buildClip0() {
+    final path = Path();
+    final clipShape0 = Path()..addRect(const Rect.fromLTWH(0, 0, 8, 8));
+    path.addPath(
+      clipShape0,
+      Offset.zero,
+      matrix4: Float64List.fromList([
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.9999999999999999,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        2.0,
+        2.0,
+        0.0,
+        1.0,
+      ]),
+    );
+    return path;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleX = size.width / _AffineGeometry._viewBoxWidth;
+    final scaleY = size.height / _AffineGeometry._viewBoxHeight;
+    canvas
+      ..save()
+      ..scale(scaleX, scaleY)
+      ..translate(-_AffineGeometry._viewBoxMinX, -_AffineGeometry._viewBoxMinY);
+
+    canvas.save();
+    canvas.transform(_transform0);
+    canvas.drawRect(_rect0, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform1);
+    canvas.drawRect(_rect1, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform2);
+    canvas.drawRect(_rect2, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform3);
+    canvas.save();
+    canvas.transform(_transform4);
+    canvas.drawRect(_rect3, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform5);
+    canvas.drawPath(
+      __path0,
+      _strokePaint
+        ..color = color1
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.butt
+        ..strokeJoin = StrokeJoin.miter,
+    );
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform6);
+    canvas.clipPath(__clip0);
+    canvas.drawRect(_rect4, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform7);
+    canvas.drawRect(_rect5, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.save();
+    canvas.transform(_transform8);
+    canvas.drawRect(_rect6, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _AffineGeometryPainter oldDelegate) {
+    return oldDelegate.color1 != color1;
+  }
 }
 
 /// A dotdart-generated SVG widget from `assets/icons/cross.svg`.

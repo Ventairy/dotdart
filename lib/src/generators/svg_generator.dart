@@ -18,6 +18,33 @@ class SvgGenerator {
   final SvgDocument document;
   final String sourcePath;
 
+  /// Whether generated matrix fields require Dart typed data.
+  bool get requiresTypedData =>
+      _containsMatrix(document.children) || document.clipPaths.values.any((clip) => _containsMatrix(clip.children));
+
+  bool _containsMatrix(List<SvgElement> elements) => elements.any(
+    (element) =>
+        (element.transform?.any((op) => op is SvgMatrix) ?? false) ||
+        (element is SvgGroup && _containsMatrix(element.children)),
+  );
+
+  String _matrixLiteral(List<SvgTransformOp> transforms) {
+    final matrix = SvgMatrix.compose(transforms);
+    return 'Float64List.fromList([${matrix.storage.map((value) => value == 0 ? '0.0' : value.toString()).join(', ')}])';
+  }
+
+  void _emitTransformFields(StringBuffer b, List<SvgElement> elements, Map<SvgElement, String> fields) {
+    for (final element in elements) {
+      final transforms = element.transform;
+      if (transforms != null && transforms.any((op) => op is SvgMatrix)) {
+        final name = '_transform${fields.length}';
+        fields[element] = name;
+        b.writeln('  static final Float64List $name = ${_matrixLiteral(transforms)};');
+      }
+      if (element is SvgGroup) _emitTransformFields(b, element.children, fields);
+    }
+  }
+
   /// Returns the constructor parameters of the generated SVG widget.
   ///
   /// Used by `NamespaceAssembler` to emit matching accessor methods.
@@ -265,6 +292,9 @@ class SvgGenerator {
 
     // ── Geometry emission (walk, emit static fields) ──
 
+    final transformFields = <SvgElement, String>{};
+    _emitTransformFields(b, document.children, transformFields);
+
     var pathIdx = 0;
     var rrectIdx = 0;
     var ellipseRectIdx = 0;
@@ -354,6 +384,7 @@ class SvgGenerator {
       colorPlan.colorsByElement,
       geometryFieldByElement,
       clipPathFieldNames,
+      transformFields,
     );
 
     b.writeln('    canvas.restore();');
@@ -390,6 +421,7 @@ class SvgGenerator {
     Map<SvgElement, ({int? fill, int? stroke})> colorsByElement,
     Map<SvgElement, String> geometryFieldByElement,
     Map<String, String> clipPathFieldNames,
+    Map<SvgElement, String> transformFields,
   ) {
     for (final element in elements) {
       switch (element) {
@@ -397,8 +429,17 @@ class SvgGenerator {
           _emitScopedDraw(
             b,
             element,
-            () => _emitDrawCalls(b, children, colors, colorsByElement, geometryFieldByElement, clipPathFieldNames),
+            () => _emitDrawCalls(
+              b,
+              children,
+              colors,
+              colorsByElement,
+              geometryFieldByElement,
+              clipPathFieldNames,
+              transformFields,
+            ),
             clipPathFieldNames,
+            transformFields,
           );
         case SvgPath(:final style):
           _emitScopedDraw(
@@ -406,6 +447,7 @@ class SvgGenerator {
             element,
             () => _emitPathDraw(b, style, geometryFieldByElement[element]!, colors, colorsByElement[element]!),
             clipPathFieldNames,
+            transformFields,
           );
         case SvgRect(:final style, :final rx, :final ry):
           _emitScopedDraw(
@@ -420,6 +462,7 @@ class SvgGenerator {
               rx > 0 || ry > 0,
             ),
             clipPathFieldNames,
+            transformFields,
           );
         case SvgCircle(:final style):
         case SvgEllipse(:final style):
@@ -428,6 +471,7 @@ class SvgGenerator {
             element,
             () => _emitEllipseDraw(b, style, geometryFieldByElement[element]!, colors, colorsByElement[element]!),
             clipPathFieldNames,
+            transformFields,
           );
         case SvgLine(:final style):
           _emitScopedDraw(
@@ -435,6 +479,7 @@ class SvgGenerator {
             element,
             () => _emitLineDraw(b, style, geometryFieldByElement[element]!, colors, colorsByElement[element]!),
             clipPathFieldNames,
+            transformFields,
           );
         case SvgPolyline(:final style):
         case SvgPolygon(:final style):
@@ -443,6 +488,7 @@ class SvgGenerator {
             element,
             () => _emitPolyDraw(b, style, geometryFieldByElement[element]!, colors, colorsByElement[element]!),
             clipPathFieldNames,
+            transformFields,
           );
       }
     }
@@ -453,13 +499,19 @@ class SvgGenerator {
     SvgElement element,
     void Function() emitDraw,
     Map<String, String> clipPathFieldNames,
+    Map<SvgElement, String> transformFields,
   ) {
     final transform = element.transform;
     final hasTransform = transform != null && transform.isNotEmpty;
     final clipField = clipPathFieldNames[element.style.clipPathId];
     final hasClip = clipField != null;
     if (hasTransform || hasClip) b.writeln('    canvas.save();');
-    _emitCanvasTransforms(b, transform ?? []);
+    final matrixField = transformFields[element];
+    if (matrixField != null) {
+      b.writeln('    canvas.transform($matrixField);');
+    } else {
+      _emitCanvasTransforms(b, transform ?? []);
+    }
     if (hasClip) {
       b.writeln('    canvas.clipPath($clipField);');
     }
@@ -470,6 +522,8 @@ class SvgGenerator {
   void _emitCanvasTransforms(StringBuffer b, List<SvgTransformOp> transforms) {
     for (final op in transforms) {
       switch (op) {
+        case SvgMatrix():
+          throw StateError('Matrix transforms must be emitted as cached fields.');
         case SvgTranslate(:final tx, :final ty):
           b.writeln('    canvas.translate(${_fmt(tx)}, ${_fmt(ty)});');
         case SvgScale(:final sx, :final sy):
@@ -740,7 +794,9 @@ class SvgGenerator {
       b.writeln('    path.addPath(');
       b.writeln('      $localName,');
       b.writeln('      Offset.zero,');
-      if (transforms.isNotEmpty) {
+      if (transforms.any((op) => op is SvgMatrix)) {
+        b.writeln('      matrix4: ${_matrixLiteral(transforms)},');
+      } else if (transforms.isNotEmpty) {
         b.writeln('      matrix4: (Matrix4.identity()');
         _emitMatrixTransforms(b, transforms);
         b.writeln('          ).storage,');
@@ -754,6 +810,8 @@ class SvgGenerator {
   void _emitMatrixTransforms(StringBuffer b, List<SvgTransformOp> transforms) {
     for (final transform in transforms) {
       switch (transform) {
+        case SvgMatrix():
+          throw StateError('Matrix transforms must be composed at build time.');
         case SvgTranslate(:final tx, :final ty):
           b.writeln('        ..translateByDouble(${_fmt(tx)}, ${_fmt(ty)}, 0, 1)');
         case SvgScale(:final sx, :final sy):

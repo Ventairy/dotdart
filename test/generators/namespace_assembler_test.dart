@@ -6,6 +6,27 @@ import 'package:dotdart/src/generators/naming.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final requiresTypedData in [false, true]) {
+    test('when typed data is $requiresTypedData, it should emit only the required import', () {
+      final source = NamespaceAssembler(
+        namespaceName: 'Icons',
+        folderSegment: 'icons',
+        assets: [
+          GeneratedAssetSpec(
+            sourcePath: 'assets/icons/icon.svg',
+            accessorName: 'icon',
+            widgetClassName: '_Icon',
+            params: [const AccessorParam(name: 'key', type: 'Key?')],
+            widgetSource: 'class _Icon {}',
+            assetType: DotdartAssetType.svg,
+            requiresTypedData: requiresTypedData,
+          ),
+        ],
+      ).assemble();
+      expect(source.contains("import 'dart:typed_data';"), requiresTypedData);
+    });
+  }
+
   const crossAsset = GeneratedAssetSpec(
     sourcePath: 'assets/icons/cross.svg',
     accessorName: 'cross',

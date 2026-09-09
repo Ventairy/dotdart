@@ -243,6 +243,7 @@ class _DotdartBuilder implements Builder {
       widgetClassName: generator.widgetClassName,
       params: generator.params,
       widgetSource: generator.generateWidgetClass(),
+      requiresTypedData: generator.requiresTypedData,
     );
   }
 
@@ -270,6 +271,7 @@ class _DotdartBuilder implements Builder {
     String? cacheKey,
     double? cacheAspectRatio,
     bool requiresPathMetrics = false,
+    bool requiresTypedData = false,
   }) {
     return DiscoveredAsset(
       assetId: assetId,
@@ -283,6 +285,7 @@ class _DotdartBuilder implements Builder {
         cacheKey: cacheKey,
         cacheAspectRatio: cacheAspectRatio,
         requiresPathMetrics: requiresPathMetrics,
+        requiresTypedData: requiresTypedData,
       ),
     );
   }

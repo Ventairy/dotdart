@@ -14,6 +14,7 @@ class GeneratedAssetSpec {
     this.cacheKey,
     this.cacheAspectRatio,
     this.requiresPathMetrics = false,
+    this.requiresTypedData = false,
   });
 
   /// Source path relative to the consumer package.
@@ -42,4 +43,7 @@ class GeneratedAssetSpec {
 
   /// Whether this asset requires Flutter's `PathMetric` type.
   final bool requiresPathMetrics;
+
+  /// Whether generated fields require Dart typed data.
+  final bool requiresTypedData;
 }
