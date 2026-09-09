@@ -11,8 +11,8 @@ Supported:
   `polygon`
 - groups and inherited presentation attributes
 - fill, stroke, opacity, fill rule, line cap, and line join
-- translate, scale, and rotate transforms on groups, drawable shapes, and
-  shapes inside clip paths
+- `translate()`, `scale()`, `rotate()`, `matrix()`, `skewX()`, and `skewY()`
+  transforms on groups, drawable shapes, and shapes inside clip paths
 - `viewBox` offsets
 - `defs`, `clipPath`, and `clip-path="url(#id)"`
 - an optional UTF-8 byte order mark and standard leading XML declaration
@@ -23,7 +23,11 @@ Not supported:
 - CSS `style` blocks
 - `use` and `symbol`
 - arc path commands
-- matrix and skew transforms
+- CSS transforms and transforms on the root `svg` element
+
+Matrix and skew calculations happen at build time. Generated painters reuse
+cached matrix data. Transform numbers must be finite; skew angles at odd
+multiples of 90 degrees are undefined and rejected.
 
 Generated SVG accessors expose supported source colors as direct optional
 parameters. A drawable's `id` is used first; an unnamed drawable uses its

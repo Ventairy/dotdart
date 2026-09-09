@@ -158,6 +158,29 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('when generated matrix and skew geometry renders, it should preserve fills strokes and clips', (tester) async {
+      const boundaryKey = ValueKey('affine_geometry_boundary');
+      await tester.pumpWidget(Center(child: RepaintBoundary(
+        key: boundaryKey, child: $Icons.affineGeometry(width: 100),
+      )));
+      await tester.pumpAndSettle();
+      final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey));
+      final captured = await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        return (image, bytes);
+      });
+      final (image, bytes) = captured!;
+      addTearDown(image.dispose);
+      final pixels = bytes!.buffer.asUint8List();
+      // Interior points calculated independently from the SVG coordinates.
+      final samples = [(5, 5), (1, 1), (39, 6), (31, 6), (66, 10), (66, 2),
+        (16, 38), (5, 38), (45, 34), (45, 37), (70, 36), (62, 36),
+        (15, 64), (5, 64), (35, 65)];
+      expect(samples.map((point) => pixels[(point.$2 * image.width + point.$1) * 4 + 3]),
+        [255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 0]);
+    });
+
     testWidgets('when a generated SVG rotates a drawable, it should preserve the centered dumbbell connector', (
       tester,
     ) async {

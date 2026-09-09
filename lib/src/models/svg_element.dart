@@ -1,4 +1,8 @@
+import 'dart:math' as math;
+
 import 'svg_style.dart';
+
+part 'svg_matrix.dart';
 
 /// A visual element in an SVG document tree.
 ///

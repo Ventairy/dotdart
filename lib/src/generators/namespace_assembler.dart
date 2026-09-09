@@ -70,6 +70,9 @@ class NamespaceAssembler {
     if (types.contains(DotdartAssetType.svg) || types.contains(DotdartAssetType.lottie)) {
       b.writeln("import 'dart:math' as math;");
     }
+    if (assets.any((asset) => asset.requiresTypedData)) {
+      b.writeln("import 'dart:typed_data';");
+    }
     if (assets.any((asset) => asset.requiresPathMetrics)) {
       b.writeln("import 'dart:ui' show PathMetric;");
     }
