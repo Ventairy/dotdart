@@ -1,3 +1,11 @@
+## 0.11.2
+
+- Added support for the single outer drop-shadow filter chain exported by
+  vector editors, including its blur, offset, color, opacity, and filter region.
+  Other SVG filter graphs remain unsupported.
+- Invalid or missing SVG filter references now fail explicitly instead of
+  silently dropping the effect.
+
 ## 0.11.1
 
 - Added SVG `matrix()`, `skewX()`, and `skewY()` transforms on groups,

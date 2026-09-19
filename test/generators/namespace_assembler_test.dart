@@ -27,6 +27,27 @@ void main() {
     });
   }
 
+  for (final requiresImageFilter in [false, true]) {
+    test('when image filters are $requiresImageFilter, it should import the filter type only when needed', () {
+      final source = NamespaceAssembler(
+        namespaceName: 'Icons',
+        folderSegment: 'icons',
+        assets: [
+          GeneratedAssetSpec(
+            sourcePath: 'assets/icons/icon.svg',
+            accessorName: 'icon',
+            widgetClassName: '_Icon',
+            params: [const AccessorParam(name: 'key', type: 'Key?')],
+            widgetSource: 'class _Icon {}',
+            assetType: DotdartAssetType.svg,
+            requiresImageFilter: requiresImageFilter,
+          ),
+        ],
+      ).assemble();
+      expect(source.contains("import 'dart:ui' show ImageFilter;"), requiresImageFilter);
+    });
+  }
+
   const crossAsset = GeneratedAssetSpec(
     sourcePath: 'assets/icons/cross.svg',
     accessorName: 'cross',

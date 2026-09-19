@@ -28,6 +28,9 @@ class SvgGenerator {
         (element is SvgGroup && _containsMatrix(element.children)),
   );
 
+  /// Whether the compiled shadows use Flutter image filters.
+  bool get requiresImageFilter => document.dropShadows.isNotEmpty;
+
   String _matrixLiteral(List<SvgTransformOp> transforms) {
     final matrix = SvgMatrix.compose(transforms);
     return 'Float64List.fromList([${matrix.storage.map((value) => value == 0 ? '0.0' : value.toString()).join(', ')}])';
@@ -290,6 +293,8 @@ class SvgGenerator {
     }
     b.writeln();
 
+    _emitShadowFields(b);
+
     // ── Geometry emission (walk, emit static fields) ──
 
     final transformFields = <SvgElement, String>{};
@@ -505,7 +510,7 @@ class SvgGenerator {
     final hasTransform = transform != null && transform.isNotEmpty;
     final clipField = clipPathFieldNames[element.style.clipPathId];
     final hasClip = clipField != null;
-    if (hasTransform || hasClip) b.writeln('    canvas.save();');
+    if (hasTransform || hasClip || element.style.filterId != null) b.writeln('    canvas.save();');
     final matrixField = transformFields[element];
     if (matrixField != null) {
       b.writeln('    canvas.transform($matrixField);');
@@ -515,8 +520,68 @@ class SvgGenerator {
     if (hasClip) {
       b.writeln('    canvas.clipPath($clipField);');
     }
+    final filterId = element.style.filterId;
+    if (filterId != null) {
+      _emitShadow(b, filterId, emitDraw);
+    } else {
+      emitDraw();
+    }
+    if (hasTransform || hasClip || element.style.filterId != null) b.writeln('    canvas.restore();');
+  }
+
+  void _emitShadowFields(StringBuffer b) {
+    var index = 0;
+    for (final shadow in document.dropShadows.values) {
+      final (r, g, blue, a) = shadow.color;
+      b.writeln(
+        '  static const Rect _shadowBounds$index = Rect.fromLTWH('
+        '${shadow.x}, ${shadow.y}, ${shadow.width}, ${shadow.height});',
+      );
+      b.writeln(
+        '  final Paint _shadowColor$index = Paint()..colorFilter = '
+        'const ColorFilter.matrix([0, 0, 0, 0, ${r * 255}, '
+        '0, 0, 0, 0, ${g * 255}, 0, 0, 0, 0, ${blue * 255}, '
+        '0, 0, 0, $a, 0]);',
+      );
+      b.writeln(
+        '  final Paint _shadowBlur$index = Paint()..imageFilter = '
+        'ImageFilter.blur(sigmaX: ${shadow.sigma}, sigmaY: ${shadow.sigma}, tileMode: TileMode.decal);',
+      );
+      final alphaMatrix =
+          '[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '
+          '0, 0, 0, 0, 0, 0, 0, 0, ${shadow.alphaScale}, 0]';
+      b.writeln(
+        '  final Paint _shadowAlpha$index = Paint()..colorFilter = '
+        'const ColorFilter.matrix($alphaMatrix);',
+      );
+      b.writeln(
+        '  final Paint _shadowOut$index = Paint() '
+        '..blendMode = BlendMode.dstOut..colorFilter = const ColorFilter.matrix($alphaMatrix);',
+      );
+      index++;
+    }
+  }
+
+  void _emitShadow(StringBuffer b, String id, void Function() emitDraw) {
+    final index = document.dropShadows.keys.toList().indexOf(id);
+    final shadow = document.dropShadows[id]!;
+    final bounds = '_shadowBounds$index';
+    // Bound all offscreen work to the declared filter region. The alpha layer
+    // is needed before blur, and dstOut must not erase the surrounding canvas.
+    b.writeln('    canvas.clipRect($bounds);');
+    b.writeln('    canvas.saveLayer($bounds, _shadowColor$index);');
+    b.writeln('    canvas.saveLayer($bounds, _shadowBlur$index);');
+    b.writeln('    canvas.translate(${_fmt(shadow.dx)}, ${_fmt(shadow.dy)});');
+    b.writeln('    canvas.clipRect($bounds);');
+    b.writeln('    canvas.saveLayer($bounds, _shadowAlpha$index);');
     emitDraw();
-    if (hasTransform || hasClip) b.writeln('    canvas.restore();');
+    b.writeln('    canvas.restore();');
+    b.writeln('    canvas.restore();');
+    b.writeln('    canvas.saveLayer($bounds, _shadowOut$index);');
+    emitDraw();
+    b.writeln('    canvas.restore();');
+    b.writeln('    canvas.restore();');
+    emitDraw();
   }
 
   void _emitCanvasTransforms(StringBuffer b, List<SvgTransformOp> transforms) {

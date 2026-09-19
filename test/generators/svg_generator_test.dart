@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dotdart/src/generators/svg_generator.dart';
 import 'package:dotdart/src/models/svg_document.dart';
 import 'package:dotdart/src/models/svg_element.dart';
@@ -7,6 +9,26 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgGenerator', () {
+    test('when generating a drop shadow, it should cache paints and isolate bounded compositing', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/drop_shadow.svg').readAsStringSync();
+      final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/drop_shadow.svg');
+      final code = generator.generateWidgetClass();
+      expect(
+        [generator.requiresImageFilter, code],
+        [
+          true,
+          allOf(
+            contains('BlendMode.dstOut'),
+            contains('tileMode: TileMode.decal'),
+            contains('canvas.clipRect(_shadowBounds0)'),
+            contains('canvas.saveLayer(_shadowBounds0, _shadowAlpha0)'),
+            isNot(matches(r'void paint[\s\S]*Paint\(\)')),
+            isNot(contains('saveLayer(null')),
+          ),
+        ],
+      );
+    });
+
     test('when generating a matrix group, it should cache precise column-major values outside paint', () {
       final document = SvgParser.parse('''
 <svg viewBox="0 0 20 20">

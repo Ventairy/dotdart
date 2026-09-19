@@ -15,11 +15,12 @@ Supported:
   transforms on groups, drawable shapes, and shapes inside clip paths
 - `viewBox` offsets
 - `defs`, `clipPath`, and `clip-path="url(#id)"`
+- some exported drop shadows (see below)
 - an optional UTF-8 byte order mark and standard leading XML declaration
 
 Not supported:
 
-- gradients, filters, masks, patterns, text, or embedded images
+- gradients, arbitrary filters, masks, patterns, text, or embedded images
 - CSS `style` blocks
 - `use` and `symbol`
 - arc path commands
@@ -44,6 +45,25 @@ SVG IDs must be non-empty, contain no whitespace, be valid standalone XML IDs,
 and be unique across the document. If different valid IDs sanitize to the same
 Dart name, the later parameter receives a deterministic numeric suffix. The
 generated Dartdoc records the original SVG ID.
+
+### SVG drop shadows
+
+dotdart supports some SVG exports with a single shadow outside a shape or group.
+It preserves the shadow's position, softness, color, and transparency. Support
+depends on how your design tool saves the shadow, so two SVGs that look the same
+may not both be supported.
+
+Inner shadows, stacked shadows on the same artwork, and shadows combined with
+group clipping or group transparency are not supported. If dotdart rejects a
+shadow, simplify or remove the effect in your design tool and export again.
+You can also export the artwork as a PNG or WebP to keep its appearance.
+
+To change the shadow's color or transparency, edit the source asset and
+regenerate it. Shape colors can still be changed through the generated widget's
+color parameters.
+
+Shadows take more work to draw. Check performance on your target devices when
+displaying many large icons with shadows.
 
 ## Lottie
 

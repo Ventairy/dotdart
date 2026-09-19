@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dotdart/src/models/svg_element.dart';
 import 'package:dotdart/src/models/svg_style.dart';
 import 'package:dotdart/src/parsers/lottie_parser.dart';
@@ -6,6 +8,38 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgParser', () {
+    test('when parsing an exported drop shadow, it should accept the filter without warnings', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/drop_shadow.svg').readAsStringSync();
+      expect(SvgParser.parse(source).warnings, isEmpty);
+    });
+
+    for (final reference in ['url(#missing)', 'url(https://example.com/shadow.svg#shadow)', 'blur(2px)']) {
+      test('when parsing filter reference $reference, it should fail instead of dropping the effect', () {
+        expect(
+          () => SvgParser.parse('<svg viewBox="0 0 10 10"><path filter="$reference" d="M0 0H10V10Z"/></svg>'),
+          throwsA(anyOf(isA<DotdartInvalidSvgException>(), isA<DotdartUnsupportedFeatureException>())),
+        );
+      });
+    }
+
+    test('when parsing a shadow on a group, it should not inherit the filter onto children', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/drop_shadow.svg').readAsStringSync();
+      final group = SvgParser.parse(source).document.children.single as SvgGroup;
+      expect((group.style.filterId, group.children.single.style.filterId), ('filter0_d_1996_1857', null));
+    });
+
+    for (final (description, attribute) in [
+      ('nested filter', 'filter="url(#filter0_d_1996_1857)"'),
+      ('ancestor opacity', 'opacity="0.5"'),
+      ('ancestor clip', 'clip-path="url(#clip)"'),
+    ]) {
+      test('when parsing a shadow with $description, it should reject unsupported compositing', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/drop_shadow.svg').readAsStringSync();
+        final nested = source.replaceFirst('<g filter=', '<g $attribute><g filter=').replaceFirst('</g>', '</g></g>');
+        expect(() => SvgParser.parse(nested), throwsA(isA<DotdartUnsupportedFeatureException>()));
+      });
+    }
+
     test('when parsing an XML-declared SVG, it should return the SVG document', () {
       final result = SvgParser.parse(
         '''
