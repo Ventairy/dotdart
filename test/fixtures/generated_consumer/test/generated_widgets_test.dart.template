@@ -29,6 +29,7 @@ void main() {
             Widget? Function(String fileName, {Key? key, double? width, double? height}) lookup,
           })
         >[
+          (fileName: 'drop_shadow.svg', direct: $Icons.dropShadow, lookup: $Icons.findByName),
           (fileName: 'fixture_icon.svg', direct: $Icons.fixtureIcon, lookup: $Icons.findByName),
           (fileName: 'lottie.json', direct: $Icons.lottie, lookup: $Icons.findByName),
           (fileName: 'photo.png', direct: $Icons.photo, lookup: $Icons.findByName),
@@ -74,6 +75,55 @@ void main() {
         );
       }
     }
+
+    testWidgets('when an exported drop shadow renders, it should preserve fill and paint outside the outline', (tester) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: RepaintBoundary(key: key, child: $Icons.dropShadow(width: 84))),
+      ));
+      await tester.pumpAndSettle();
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final (image, bytes) = await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        return (image, await image.toByteData(format: ui.ImageByteFormat.rawRgba));
+      }) ?? (throw StateError('Image capture failed'));
+      final pixels = bytes!.buffer.asUint8List();
+      final inside = (40 * image.width + 40) * 4;
+      final outside = (64 * image.width + 40) * 4;
+      final far = (75 * image.width + 40) * 4;
+      expect(
+        [pixels.sublist(inside, inside + 4), pixels[outside + 3], pixels[far + 3]],
+        [[66, 197, 82, 255], greaterThan(0), 0],
+      );
+      image.dispose();
+    });
+
+    testWidgets('when shadow compositing meets transparency and siblings, it should preserve knockout and bounds', (tester) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(child: RepaintBoundary(key: key, child: $Icons.shadowComposite(width: 42))),
+      ));
+      await tester.pumpAndSettle();
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final (image, bytes) = await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        return (image, await image.toByteData(format: ui.ImageByteFormat.rawRgba));
+      }) ?? (throw StateError('Image capture failed'));
+      final pixels = bytes!.buffer.asUint8List();
+      final samples = [2, 20, 33, 35].map((x) {
+        final offset = (20 * image.width + x) * 4;
+        return pixels.sublist(offset, offset + 4);
+      }).toList();
+      expect(samples, [
+        [255, 0, 0, 255],
+        [closeTo(33, 1), closeTo(99, 1), closeTo(169, 1), 255],
+        [0, 0, closeTo(82, 1), 255],
+        [0, 0, 255, 255],
+      ]);
+      image.dispose();
+    });
 
     testWidgets('when generated vector and image accessors render together, it should paint without errors', (
       tester,

@@ -1,3 +1,4 @@
+import 'svg_drop_shadow.dart';
 import 'svg_element.dart';
 import 'svg_style.dart';
 
@@ -37,6 +38,7 @@ class SvgDocument {
     this.width,
     this.height,
     this.clipPaths = const {},
+    this.dropShadows = const {},
   });
 
   /// The `viewBox` attribute (`minX minY width height`).
@@ -56,6 +58,9 @@ class SvgDocument {
   /// Looked up by [SvgStyle.clipPathId] during code generation to resolve
   /// `clip-path="url(#id)"` presentation attributes.
   final Map<String, SvgClipPath> clipPaths;
+
+  /// Validated drop-shadow filters keyed by their source ID.
+  final Map<String, SvgDropShadow> dropShadows;
 
   /// Computed width for the widget's native aspect: uses [width] when set,
   /// falls back to [viewBox] dimensions.

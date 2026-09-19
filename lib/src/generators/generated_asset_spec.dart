@@ -15,6 +15,7 @@ class GeneratedAssetSpec {
     this.cacheAspectRatio,
     this.requiresPathMetrics = false,
     this.requiresTypedData = false,
+    this.requiresImageFilter = false,
   });
 
   /// Source path relative to the consumer package.
@@ -46,4 +47,7 @@ class GeneratedAssetSpec {
 
   /// Whether generated fields require Dart typed data.
   final bool requiresTypedData;
+
+  /// Whether generated shadows need the Flutter image-filter type.
+  final bool requiresImageFilter;
 }

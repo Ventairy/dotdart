@@ -73,6 +73,9 @@ class NamespaceAssembler {
     if (assets.any((asset) => asset.requiresTypedData)) {
       b.writeln("import 'dart:typed_data';");
     }
+    if (assets.any((asset) => asset.requiresImageFilter)) {
+      b.writeln("import 'dart:ui' show ImageFilter;");
+    }
     if (assets.any((asset) => asset.requiresPathMetrics)) {
       b.writeln("import 'dart:ui' show PathMetric;");
     }

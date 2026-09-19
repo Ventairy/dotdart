@@ -9,6 +9,7 @@
 
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/widgets.dart';
 
@@ -93,6 +94,9 @@ mixin _DotdartSvgSizing on StatelessWidget {
 /// $Icons.cross(<params>);
 /// ```
 /// ```dart
+/// $Icons.dropShadow(<params>);
+/// ```
+/// ```dart
 /// $Icons.nestedGroups(<params>);
 /// ```
 abstract final class $Icons {
@@ -121,6 +125,21 @@ abstract final class $Icons {
     bool maintainAspectRatio = true,
     Color? color1,
   }) => _Cross(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    color1: color1,
+  );
+
+  /// Builds the `DropShadow` widget from `dropShadow.svg`.
+  static Widget dropShadow({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    Color? color1,
+  }) => _DropShadow(
     key: key,
     width: width,
     height: height,
@@ -166,6 +185,7 @@ abstract final class $Icons {
       height: height,
     ),
     'cross.svg' => cross(key: key, width: width, height: height),
+    'drop_shadow.svg' => dropShadow(key: key, width: width, height: height),
     'nested_groups.svg' => nestedGroups(key: key, width: width, height: height),
     _ => null,
   };
@@ -623,6 +643,206 @@ class _CrossPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CrossPainter oldDelegate) {
+    return oldDelegate.color1 != color1;
+  }
+}
+
+/// A dotdart-generated SVG widget from `assets/icons/drop_shadow.svg`.
+///
+/// Renders a 42.0×42.0 SVG
+/// on a viewBox of 0.0 0.0 42.0 42.0.
+/// No flutter_svg runtime dependency — drawn entirely via [CustomPainter].
+class _DropShadow extends StatelessWidget with _DotdartSvgSizing {
+  const _DropShadow({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.color1,
+  });
+
+  static const double _svgWidth = 42;
+  static const double _svgHeight = 42;
+  static const double _viewBoxMinX = 0;
+  static const double _viewBoxMinY = 0;
+  static const double _viewBoxWidth = 42;
+  static const double _viewBoxHeight = 42;
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Color 1 — defaults to 0xff42c552.
+  final Color? color1;
+
+  @override
+  double? get svgWidgetWidth => width;
+
+  @override
+  double? get svgWidgetHeight => height;
+
+  @override
+  bool get svgMaintainAspectRatio => maintainAspectRatio;
+
+  @override
+  double get svgNativeWidth => _DropShadow._svgWidth;
+
+  @override
+  double get svgNativeHeight => _DropShadow._svgHeight;
+
+  @override
+  double get svgViewBoxWidth => _DropShadow._viewBoxWidth;
+
+  @override
+  double get svgViewBoxHeight => _DropShadow._viewBoxHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _DropShadowPainter(
+            color1: color1 ?? const Color(0xff42c552),
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _DropShadowPainter extends CustomPainter {
+  _DropShadowPainter({required this.color1});
+
+  final Color color1;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+
+  static const Rect _shadowBounds0 = Rect.fromLTWH(
+    0.00380427,
+    -0.000631422,
+    41.2346,
+    41.3049,
+  );
+  final Paint _shadowColor0 = Paint()
+    ..colorFilter = const ColorFilter.matrix([
+      0,
+      0,
+      0,
+      0,
+      0.0,
+      0,
+      0,
+      0,
+      0,
+      0.0,
+      0,
+      0,
+      0,
+      0,
+      0.0,
+      0,
+      0,
+      0,
+      0.68,
+      0,
+    ]);
+  final Paint _shadowBlur0 = Paint()
+    ..imageFilter = ImageFilter.blur(
+      sigmaX: 0.419973,
+      sigmaY: 0.419973,
+      tileMode: TileMode.decal,
+    );
+  final Paint _shadowAlpha0 = Paint()
+    ..colorFilter = const ColorFilter.matrix([
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      127.0,
+      0,
+    ]);
+  final Paint _shadowOut0 = Paint()
+    ..blendMode = BlendMode.dstOut
+    ..colorFilter = const ColorFilter.matrix([
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      127.0,
+      0,
+    ]);
+  static final Path __path0 = Path()
+    ..moveTo(8, 8)
+    ..lineTo(32, 8)
+    ..lineTo(32, 32)
+    ..lineTo(8, 32)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleX = size.width / _DropShadow._viewBoxWidth;
+    final scaleY = size.height / _DropShadow._viewBoxHeight;
+    canvas
+      ..save()
+      ..scale(scaleX, scaleY)
+      ..translate(-_DropShadow._viewBoxMinX, -_DropShadow._viewBoxMinY);
+
+    canvas.save();
+    canvas.clipRect(_shadowBounds0);
+    canvas.saveLayer(_shadowBounds0, _shadowColor0);
+    canvas.saveLayer(_shadowBounds0, _shadowBlur0);
+    canvas.translate(0, 0.3706);
+    canvas.clipRect(_shadowBounds0);
+    canvas.saveLayer(_shadowBounds0, _shadowAlpha0);
+    canvas.drawPath(__path0, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.restore();
+    canvas.saveLayer(_shadowBounds0, _shadowOut0);
+    canvas.drawPath(__path0, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.restore();
+    canvas.drawPath(__path0, _fillPaint..color = color1);
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _DropShadowPainter oldDelegate) {
     return oldDelegate.color1 != color1;
   }
 }

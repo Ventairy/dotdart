@@ -20,6 +20,7 @@ class SvgStyle {
     this.strokeLineJoin = SvgStrokeLineJoin.miter,
     this.opacity = 1,
     this.clipPathId,
+    this.filterId,
   });
 
   final (double, double, double, double)? fillColor;
@@ -32,4 +33,5 @@ class SvgStyle {
   final SvgStrokeLineJoin strokeLineJoin;
   final double opacity;
   final String? clipPathId;
+  final String? filterId;
 }

@@ -1,7 +1,9 @@
 import '../../models/svg_document.dart';
+import '../../models/svg_drop_shadow.dart';
 import '../../models/svg_element.dart';
 import '../../models/svg_style.dart';
 import '../lottie_parser.dart' show DotdartUnsupportedFeatureException;
+import 'svg_drop_shadow_parser.dart';
 import 'svg_mini_xml.dart';
 import 'svg_path_data.dart' show SvgPathData;
 import 'svg_transform.dart' show SvgTransform;
@@ -29,12 +31,13 @@ class SvgParseResult {
 /// Parses SVG XML into a [SvgDocument] model.
 ///
 /// Throws [DotdartUnsupportedFeatureException] for unsupported SVG features
-/// (gradients, text, filters, etc.) and [DotdartInvalidSvgException] for
+/// (gradients, text, unsupported filters, etc.) and [DotdartInvalidSvgException] for
 /// malformed SVG files.
 class SvgParser {
   SvgParser._();
   final List<String> _warnings = [];
   final Map<String, SvgClipPath> _clipPaths = {};
+  final Map<String, SvgDropShadow> _dropShadows = {};
 
   static SvgParseResult parse(String svgXml) {
     final parser = SvgParser._();
@@ -58,9 +61,16 @@ class SvgParser {
     final width = _parseLength(root.attrs['width']);
     final height = _parseLength(root.attrs['height']);
 
+    if (root.attrs.containsKey('filter')) {
+      throw const DotdartUnsupportedFeatureException('Filters on the root SVG are not supported.');
+    }
     final rootStyle = _resolveStyle(root, _defaultStyle);
     final children = _parseChildren(root, rootStyle);
     _validateClipPathRefs(children);
+    _validateFilters(children, insideFilter: rootStyle.opacity != 1 || rootStyle.clipPathId != null);
+    for (final clip in _clipPaths.values) {
+      _validateFilters(clip.children, insideFilter: true);
+    }
 
     return SvgParseResult(
       document: SvgDocument(
@@ -69,6 +79,7 @@ class SvgParser {
         height: height,
         children: children,
         clipPaths: Map.unmodifiable(_clipPaths),
+        dropShadows: Map.unmodifiable(_dropShadows),
       ),
       warnings: List.unmodifiable(_warnings),
     );
@@ -146,6 +157,10 @@ class SvgParser {
           'CSS <style> blocks are not supported. Use presentation attributes only.',
         );
       case 'filter':
+        final id = element.attrs['id'];
+        if (id == null) throw const DotdartInvalidSvgException('<filter> requires an id.');
+        _dropShadows[id] = SvgDropShadowParser.parse(element);
+        return null;
       case 'mask':
       case 'pattern':
         throw const DotdartUnsupportedFeatureException('Filters, masks, and patterns are not supported.');
@@ -369,6 +384,7 @@ class SvgParser {
       strokeLineJoin: _parseLineJoin(element.attrs['stroke-linejoin']) ?? inherited.strokeLineJoin,
       opacity: _parseOptionalOpacity(element.attrs['opacity']) ?? inherited.opacity,
       clipPathId: _parseClipPathRef(element.attrs['clip-path']),
+      filterId: _parseFilterRef(element.attrs['filter']),
     );
   }
 
@@ -557,6 +573,37 @@ class SvgParser {
       throw DotdartInvalidSvgException('<clipPath id="$id"> must contain at least one shape.');
     }
     _clipPaths[id] = SvgClipPath(id: id, children: children, clipRule: clipRule);
+  }
+
+  String? _parseFilterRef(String? raw) {
+    if (raw == null || raw.trim() == 'none') return null;
+    final match = RegExp(r'^url\(#([^)]+)\)$').firstMatch(raw.trim());
+    if (match == null) {
+      throw const DotdartUnsupportedFeatureException('SVG filters must reference a local filter with url(#id).');
+    }
+    return match.group(1);
+  }
+
+  void _validateFilters(List<SvgElement> elements, {bool insideFilter = false}) {
+    for (final element in elements) {
+      final ref = element.style.filterId;
+      if (ref != null) {
+        if (!_dropShadows.containsKey(ref)) {
+          throw DotdartInvalidSvgException('Filter reference "$ref" not found.');
+        }
+        if (insideFilter || element.style.opacity != 1 || element.style.clipPathId != null) {
+          throw const DotdartUnsupportedFeatureException(
+            'Nested filters, filters inside clip paths, and clipping or opacity on filtered elements or their ancestors are not supported.',
+          );
+        }
+      }
+      if (element is SvgGroup) {
+        _validateFilters(
+          element.children,
+          insideFilter: insideFilter || ref != null || element.style.clipPathId != null || element.style.opacity != 1,
+        );
+      }
+    }
   }
 
   String? _parseClipPathRef(String? raw) {
