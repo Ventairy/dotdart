@@ -388,12 +388,22 @@ void main() {
           contains('final resolvedHeight = height ?? resolvedWidth / aspectRatio;'),
           contains('(resolvedWidth * devicePixelRatio).ceil()'),
           contains('(resolvedHeight * devicePixelRatio).ceil()'),
-          contains("static const _landscapeAsset = AssetImage('assets/images/landscape.png')"),
+          contains("static const _landscapeAssetPath = 'assets/images/landscape.png'"),
           contains('aspectRatio: 2,'),
           contains('final key = await provider.obtainKey(configuration);'),
           contains('imageCache.evict(key, includeLive: false)'),
         ]),
       );
+    });
+
+    test('when caching a package image, it should forward the package to the asset provider', () {
+      final code = NamespaceAssembler(
+        namespaceName: 'Images',
+        folderSegment: 'images',
+        assets: [rasterAsset],
+      ).assemble();
+
+      expect(code, allOf(contains('String? package,'), contains('AssetImage(_landscapeAssetPath, package: package)')));
     });
 
     test('when assembling a namespace without images, it should omit the cache class', () {

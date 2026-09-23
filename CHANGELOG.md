@@ -1,3 +1,19 @@
+## 0.11.3
+
+- Generated image and GIF widgets and cache methods now accept `package` so
+  apps can display and cache assets from dependency packages.
+- Added Lottie precompositions with sizes on their referencing layers, nested
+  shape groups with inherited fills and strokes, and animated group positions.
+- Added adjacent alpha and inverted-alpha mattes, including nested compositions.
+  Luminance mattes and non-adjacent matte references remain unsupported.
+- Fixed omitted transform scales and rotations using incorrect defaults.
+- Duplicate layer indexes are accepted when no parent reference uses them.
+  Ambiguous parent references still fail explicitly.
+- Reduced generated Lottie frame work by folding static group transforms,
+  sharing identical paths, removing invisible paint work, simplifying linear
+  easing, and reusing already-isolated inverted-matte results where the output
+  remains pixel-identical.
+
 ## 0.11.2
 
 - Added support for the single outer drop-shadow filter chain exported by

@@ -76,6 +76,444 @@ const _minimalLottie = '''
 
 void main() {
   group('LottieParser', () {
+    test('when nested groups own parent and child paints, it should preserve the original shape hierarchy', () {
+      final result = LottieParser.parse(
+        File('test/fixtures/generated_consumer/assets/lotties/nested_shape_paints.json').readAsStringSync(),
+      );
+      final root = result.animation.layers.single.shapeTree!;
+      final animatedAncestor = root.items.whereType<LottieGroup>().single;
+      final parent = animatedAncestor.items.whereType<LottieGroup>().single;
+      final child = parent.items.whereType<LottieGroup>().single;
+
+      expect(
+        (
+          parent.items.whereType<LottieFill>().single.colorB,
+          child.items.whereType<LottieFill>().single.colorR,
+          child.items.whereType<LottieRect>().length,
+          result.animation.layers.single.shapeGroups.length,
+        ),
+        (1.0, 1.0, 2, 1),
+      );
+    });
+
+    test('when precomposition sizes are on layers, it should parse nested alpha mattes', () {
+      final result = LottieParser.parse(File('example/assets/lotties/alpha_matte.json').readAsStringSync());
+      expect((result.animation.compositions.length, result.warnings.length), (2, 0));
+    });
+
+    test('when nested groups move, it should retain inherited paint and animated translation', () {
+      final result = LottieParser.parse(File('example/assets/lotties/alpha_matte.json').readAsStringSync());
+      final group = result.animation.compositions['inner']!.layers.first.shapeGroups.single;
+      final transform = group.items.whereType<LottieGroupTransform>().single;
+      expect(
+        (
+          group.items.whereType<LottieFill>().length,
+          transform.scaleX,
+          transform.animatedPositionX!.keyframes.last.start,
+        ),
+        (1, 100.0, 25.0),
+      );
+    });
+
+    test('when parent and child fills cross an animated nested group, it should reject the lossy paint stack', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;
+      layer['shapes'] = [
+        {
+          'ty': 'gr',
+          'nm': 'Parent',
+          'it': [
+            {
+              'ty': 'gr',
+              'nm': 'Child',
+              'it': [
+                {
+                  'ty': 'rc',
+                  'p': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  's': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  'r': {'a': 0, 'k': 0},
+                },
+                {
+                  'ty': 'fl',
+                  'c': {
+                    'a': 0,
+                    'k': [1, 0, 0, 1],
+                  },
+                  'o': {'a': 0, 'k': 100},
+                },
+                {
+                  'ty': 'tr',
+                  'p': {
+                    'a': 1,
+                    'k': [
+                      {
+                        't': 0,
+                        's': [0, 0],
+                        'e': [20, 0],
+                      },
+                      {
+                        't': 30,
+                        's': [20, 0],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+            {
+              'ty': 'fl',
+              'c': {
+                'a': 0,
+                'k': [0, 0, 1, 1],
+              },
+              'o': {'a': 0, 'k': 50},
+            },
+          ],
+        },
+      ];
+
+      expect(
+        () => LottieParser.parse(jsonEncode(root)),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (error) => error.message,
+            'message',
+            contains('cannot be preserved exactly'),
+          ),
+        ),
+      );
+    });
+
+    test('when partial nested-group opacity spans multiple draws, it should reject atomic compositing', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;
+      layer['shapes'] = [
+        {
+          'ty': 'gr',
+          'nm': 'Parent',
+          'it': [
+            {
+              'ty': 'gr',
+              'nm': 'Child',
+              'it': [
+                {
+                  'ty': 'rc',
+                  'p': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  's': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  'r': {'a': 0, 'k': 0},
+                },
+                {
+                  'ty': 'rc',
+                  'p': {
+                    'a': 0,
+                    'k': [40, 20],
+                  },
+                  's': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  'r': {'a': 0, 'k': 0},
+                },
+                {
+                  'ty': 'tr',
+                  'o': {'a': 0, 'k': 50},
+                },
+              ],
+            },
+            {
+              'ty': 'st',
+              'c': {
+                'a': 0,
+                'k': [0, 0, 1, 1],
+              },
+              'o': {'a': 0, 'k': 100},
+              'w': {'a': 0, 'k': 4},
+            },
+          ],
+        },
+      ];
+
+      expect(
+        () => LottieParser.parse(jsonEncode(root)),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (error) => error.message,
+            'message',
+            contains('partial group opacity'),
+          ),
+        ),
+      );
+    });
+
+    test('when partial top-level group opacity spans multiple draws, it should reject atomic compositing', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;
+      layer['shapes'] = [
+        {
+          'ty': 'gr',
+          'nm': 'Group',
+          'it': [
+            {
+              'ty': 'rc',
+              'p': {
+                'a': 0,
+                'k': [20, 20],
+              },
+              's': {
+                'a': 0,
+                'k': [20, 20],
+              },
+              'r': {'a': 0, 'k': 0},
+            },
+            {
+              'ty': 'rc',
+              'p': {
+                'a': 0,
+                'k': [30, 20],
+              },
+              's': {
+                'a': 0,
+                'k': [20, 20],
+              },
+              'r': {'a': 0, 'k': 0},
+            },
+            {
+              'ty': 'st',
+              'c': {
+                'a': 0,
+                'k': [0, 0, 1, 1],
+              },
+              'o': {'a': 0, 'k': 100},
+              'w': {'a': 0, 'k': 4},
+            },
+            {
+              'ty': 'tr',
+              'o': {'a': 0, 'k': 50},
+            },
+          ],
+        },
+      ];
+
+      expect(
+        () => LottieParser.parse(jsonEncode(root)),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (error) => error.message,
+            'message',
+            contains('partial group opacity'),
+          ),
+        ),
+      );
+    });
+
+    test('when a nested trim path would discard a paint, it should reject the lossy paint stack', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;
+      layer['shapes'] = [
+        {
+          'ty': 'gr',
+          'nm': 'Parent',
+          'it': [
+            {
+              'ty': 'gr',
+              'nm': 'Child',
+              'it': [
+                {
+                  'ty': 'rc',
+                  'p': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  's': {
+                    'a': 0,
+                    'k': [20, 20],
+                  },
+                  'r': {'a': 0, 'k': 0},
+                },
+                {
+                  'ty': 'tm',
+                  's': {'a': 0, 'k': 0},
+                  'e': {'a': 0, 'k': 100},
+                  'o': {'a': 0, 'k': 0},
+                  'm': 1,
+                },
+                {
+                  'ty': 'fl',
+                  'c': {
+                    'a': 0,
+                    'k': [1, 0, 0, 1],
+                  },
+                  'o': {'a': 0, 'k': 100},
+                },
+              ],
+            },
+            {
+              'ty': 'fl',
+              'c': {
+                'a': 0,
+                'k': [0, 0, 1, 1],
+              },
+              'o': {'a': 0, 'k': 100},
+            },
+          ],
+        },
+      ];
+
+      expect(
+        () => LottieParser.parse(jsonEncode(root)),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (error) => error.message,
+            'message',
+            contains('trim paths with a nested paint stack'),
+          ),
+        ),
+      );
+    });
+
+    test('when layer and group positions use split axes, it should parse each scalar property independently', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;
+      final transform = ((layer['shapes']! as List<Object?>).single! as Map<String, Object?>)['it']! as List<Object?>;
+      (layer['ks']! as Map<String, Object?>)['p'] = {
+        's': true,
+        'x': {'a': 0, 'k': 12},
+        'y': {
+          'a': 1,
+          'k': [
+            {
+              't': 0,
+              's': [4],
+              'e': [14],
+            },
+            {
+              't': 30,
+              's': [14],
+            },
+          ],
+        },
+      };
+      (transform.last! as Map<String, Object?>)['p'] = {
+        's': true,
+        'x': {'a': 0, 'k': 3},
+        'y': {
+          'a': 1,
+          'k': [
+            {
+              't': 0,
+              's': [5],
+              'e': [15],
+            },
+            {
+              't': 30,
+              's': [15],
+            },
+          ],
+        },
+      };
+
+      final parsed = LottieParser.parse(jsonEncode(root)).animation.layers.single;
+      final groupTransform = parsed.shapeGroups.single.items.whereType<LottieGroupTransform>().single;
+
+      expect(
+        (
+          parsed.positionX!.staticValue,
+          parsed.positionY!.keyframes.last.start,
+          groupTransform.positionX,
+          groupTransform.animatedPositionY!.keyframes.last.start,
+        ),
+        (12.0, 14.0, 3.0, 15.0),
+      );
+    });
+
+    for (final invalid in [0, -1, 'wide', null]) {
+      test('when a precomposition width is $invalid, it should reject the invalid layer size', () {
+        final root =
+            jsonDecode(File('example/assets/lotties/alpha_matte.json').readAsStringSync()) as Map<String, Object?>;
+        final layers = root['layers']! as List<Object?>;
+        (layers.first! as Map<String, Object?>)['w'] = invalid;
+        expect(() => LottieParser.parse(jsonEncode(root)), throwsA(isA<DotdartInvalidLottieException>()));
+      });
+    }
+
+    for (final mode in [3, 4, 9]) {
+      test('when a matte mode is $mode, it should reject unsupported masking', () {
+        final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+        final layers = root['layers']! as List<Object?>;
+        (layers.first! as Map<String, Object?>)['tt'] = mode;
+        expect(() => LottieParser.parse(jsonEncode(root)), throwsA(isA<DotdartUnsupportedFeatureException>()));
+      });
+    }
+
+    test('when a matte has no preceding layer, it should reject the missing source', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      ((root['layers']! as List<Object?>).first! as Map<String, Object?>)['tt'] = 1;
+      expect(() => LottieParser.parse(jsonEncode(root)), throwsA(isA<DotdartUnsupportedFeatureException>()));
+    });
+
+    test('when duplicate indexes are used as a parent, it should reject the ambiguous reference', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      root['layers'] = [
+        {'ty': 3, 'ind': 1},
+        {'ty': 3, 'ind': 1},
+        {'ty': 3, 'ind': 2, 'parent': 1},
+      ];
+      expect(() => LottieParser.parse(jsonEncode(root)), throwsA(isA<DotdartInvalidLottieException>()));
+    });
+
+    test('when transforms omit scale and rotation, it should retain their identity defaults', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).first! as Map<String, Object?>;
+      layer['ks'] = <String, Object?>{};
+      final result = LottieParser.parse(jsonEncode(root)).animation.layers.single;
+      expect((result.rotation, result.scaleX, result.scaleY), (null, null, null));
+    });
+
+    test('when a matte source has an unsupported layer type, it should reject instead of changing the pairing', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      root['layers'] = [
+        {'ty': 2},
+        {'ty': 4, 'tt': 1},
+      ];
+      expect(() => LottieParser.parse(jsonEncode(root)), throwsA(isA<DotdartUnsupportedFeatureException>()));
+    });
+
+    test('when a matte source is itself masked, it should reject the unsupported chain', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      root['layers'] = [
+        {'ty': 4},
+        {'ty': 4, 'tt': 1},
+        {'ty': 4, 'tt': 2},
+      ];
+      expect(() => LottieParser.parse(jsonEncode(root)), throwsA(isA<DotdartUnsupportedFeatureException>()));
+    });
+
+    test('when a precomposition has no dimensions on its layer or asset, it should report the reference', () {
+      final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
+      root['assets'] = [
+        {'id': 'missing', 'layers': <Object?>[]},
+      ];
+      root['layers'] = [
+        {'ty': 0, 'refId': 'missing'},
+      ];
+      expect(
+        () => LottieParser.parse(jsonEncode(root)),
+        throwsA(isA<DotdartInvalidLottieException>().having((error) => error.message, 'message', contains('missing'))),
+      );
+    });
+
     test('when parsing the job card carousel, it should retain precomposition and parent controller layers', () {
       final source = File('example/assets/lotties/cataqui_job_cards_carousel.json').readAsStringSync();
 

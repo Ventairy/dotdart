@@ -3,6 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SharedEmitter', () {
+    test('when applying full opacity, it should reuse the original color', () {
+      final code = SharedEmitter.applyOpacityFunction();
+
+      expect(
+        code,
+        contains('if (opacity == 1) return color;'),
+      );
+    });
+
     test(
       'when emitting Lottie lifecycle code, it should delay once and apply the playback duration',
       () {

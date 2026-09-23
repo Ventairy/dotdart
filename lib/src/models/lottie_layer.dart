@@ -4,15 +4,21 @@ import 'lottie_text.dart';
 
 export 'lottie_animated_scalar.dart';
 
+part 'lottie_layer_enums.dart';
+
 /// A single layer in a Lottie animation.
 ///
 class LottieLayer {
   const LottieLayer({
     required this.name,
     required this.shapeGroups,
+    this.shapeTree,
     this.layerIndex,
     this.parentIndex,
     this.referenceId,
+    this.width,
+    this.height,
+    this.matte = LottieMatte.none,
     this.text,
     this.masks = const [],
     this.opacity,
@@ -35,6 +41,11 @@ class LottieLayer {
   /// Shape groups in this layer.
   final List<LottieGroup> shapeGroups;
 
+  /// Original nested shape hierarchy when this layer was parsed from JSON.
+  ///
+  /// A null value keeps manually constructed flat [shapeGroups] compatible.
+  final LottieGroup? shapeTree;
+
   /// Layer index used by Lottie parent references (`ind`).
   final int? layerIndex;
 
@@ -43,6 +54,15 @@ class LottieLayer {
 
   /// Referenced composition for a precomposition layer (`ty: 0`).
   final String? referenceId;
+
+  /// Clipping width of a precomposition layer (`w`).
+  final int? width;
+
+  /// Clipping height of a precomposition layer (`h`).
+  final int? height;
+
+  /// How the preceding layer masks this layer (`tt`).
+  final LottieMatte matte;
 
   /// Text content for a text layer (`ty: 5`).
   final LottieText? text;

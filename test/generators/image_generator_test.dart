@@ -21,11 +21,12 @@ void main() {
       expect(params.any((p) => p.name == 'key'), isTrue);
       expect(params.any((p) => p.name == 'width'), isTrue);
       expect(params.any((p) => p.name == 'height'), isTrue);
+      expect(params.any((p) => p.name == 'package'), isTrue);
       expect(params.any((p) => p.name == 'fit'), isTrue);
       expect(params.any((p) => p.name == 'alignment'), isTrue);
       expect(params.any((p) => p.name == 'color'), isTrue);
       expect(params.any((p) => p.name == 'colorBlendMode'), isTrue);
-      expect(params, hasLength(7));
+      expect(params, hasLength(8));
     });
 
     test('when generating the widget class name, it should derive from the source path', () {
@@ -89,7 +90,7 @@ void main() {
       expect(
         source,
         allOf(
-          contains('static final _frameBuilder = _dotdartImageFrameBuilder('),
+          contains('static final ImageFrameBuilder _frameBuilder = _dotdartImageFrameBuilder('),
           contains('frameBuilder: _frameBuilder,'),
         ),
       );
@@ -122,6 +123,12 @@ void main() {
       final source = generator.generateWidgetClass();
 
       expect(source, contains("static const String _assetPath = 'assets/three_d/cat.webp'"));
+    });
+
+    test('when generating a package image, it should forward the package to Image.asset', () {
+      final source = ImageGenerator(fixture, 'assets/three_d/cat.webp').generateWidgetClass();
+
+      expect(source, allOf(contains('final String? package;'), contains('package: package,')));
     });
 
     test('when generating source, it should not expose a public cache key', () {

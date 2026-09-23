@@ -131,6 +131,18 @@ omitted, the cache methods use the generated widget's default display size.
 Removal preserves an image that is still being displayed while releasing its
 reusable cache entry.
 
+When using generated images or GIFs from another package, pass that package's
+name to rendering and cache calls:
+
+```dart
+await $ImagesCache.precacheProfile(context, width: 160, package: 'my_assets');
+final image = $Images.profile(width: 160, package: 'my_assets');
+final removed = await $ImagesCache.removeProfile(context, width: 160, package: 'my_assets');
+```
+
+The package must declare the images or GIFs under `flutter: assets:`. Omit
+`package` for assets generated in the app itself.
+
 Look up an asset using its original filename when the name is known at runtime:
 
 ```dart
@@ -143,6 +155,7 @@ within that namespace. Unknown names and directory paths return `null`.
 It accepts `key`, `width`, and `height`, preserving the selected asset's
 existing sizing rules and defaults. Use the named accessor for asset-specific
 options such as colors, animation progress, or image fitting.
+For image and GIF namespaces, `findByName` also accepts `package`.
 
 Supported Lottie text and colors become fields on the generated `overrides`
 object.

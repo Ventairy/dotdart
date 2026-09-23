@@ -85,6 +85,11 @@ class _DotdartExamplePageState extends State<DotdartExamplePage> {
           ),
           const SizedBox(height: 16),
           _ExampleCard(
+            label: 'Alpha mattes and animated nested groups',
+            child: $Lotties.alphaMatte(width: 100, playback: LottiePlayback.loop),
+          ),
+          const SizedBox(height: 16),
+          _ExampleCard(
             label: 'Animated Lottie trim path',
             child: $Lotties.trimPath(
               width: 100,

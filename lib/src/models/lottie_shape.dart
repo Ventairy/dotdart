@@ -187,6 +187,8 @@ class LottieTrimPath extends LottieShape {
 class LottieGroupTransform extends LottieShape {
   const LottieGroupTransform({
     this.positionX = 0,
+    this.animatedPositionX,
+    this.animatedPositionY,
     this.positionY = 0,
     this.anchorX = 0,
     this.anchorY = 0,
@@ -195,6 +197,12 @@ class LottieGroupTransform extends LottieShape {
     this.rotation = 0,
     this.opacity = 100,
   });
+
+  /// Animated horizontal translation, when present.
+  final LottieAnimatedScalar? animatedPositionX;
+
+  /// Animated vertical translation, when present.
+  final LottieAnimatedScalar? animatedPositionY;
 
   final double positionX;
   final double positionY;
@@ -208,10 +216,13 @@ class LottieGroupTransform extends LottieShape {
 
 /// A shape group (`ty: "gr"`) containing nested items.
 class LottieGroup extends LottieShape {
-  const LottieGroup({required this.name, required this.items});
+  const LottieGroup({required this.name, required this.items, this.ancestorTransforms = const []});
 
   /// Group name (Lottie `nm`).
   final String name;
+
+  /// Outer group transforms, applied in source order.
+  final List<LottieGroupTransform> ancestorTransforms;
 
   /// Child shapes, fills, strokes, and transforms.
   final List<LottieShape> items;

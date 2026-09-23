@@ -90,10 +90,12 @@ abstract final class $Images {
   $Images._();
 
   /// Builds the `Cataqui` widget from `cataqui.image`.
+  /// Pass [package] when this image belongs to a dependency package.
   static Widget cataqui({
     Key? key,
     double? width,
     double? height,
+    String? package,
     BoxFit? fit,
     AlignmentGeometry alignment = Alignment.center,
     Color? color,
@@ -102,6 +104,7 @@ abstract final class $Images {
     key: key,
     width: width,
     height: height,
+    package: package,
     fit: fit,
     alignment: alignment,
     color: color,
@@ -115,13 +118,20 @@ abstract final class $Images {
   /// [key] is forwarded to the generated widget. [width] and [height] are
   /// logical pixels and use the same sizing rules as the named accessor.
   /// All asset-specific options keep their defaults.
+  /// [package] identifies the package containing an image or GIF.
   static Widget? findByName(
     String fileName, {
     Key? key,
     double? width,
     double? height,
+    String? package,
   }) => switch (fileName) {
-    'cataqui.png' => cataqui(key: key, width: width, height: height),
+    'cataqui.png' => cataqui(
+      key: key,
+      width: width,
+      height: height,
+      package: package,
+    ),
     _ => null,
   };
 }
@@ -133,21 +143,23 @@ abstract final class $Images {
 abstract final class $ImagesCache {
   $ImagesCache._();
 
-  static const _cataquiAsset = AssetImage('assets/images/cataqui.png');
+  static const _cataquiAssetPath = 'assets/images/cataqui.png';
 
   /// Decodes `cataqui` before its first render.
   ///
   /// [width] and [height] are logical pixels. Pass the same values to
   /// `$Images.cataqui` so it reuses this cache entry.
+  /// Pass the same [package] as the image widget for package assets.
   /// Omitting both values uses the widget's default display size.
   static Future<void> precacheCataqui(
     BuildContext context, {
     double? width,
     double? height,
+    String? package,
   }) => precacheImage(
     _provider(
       context,
-      asset: _cataquiAsset,
+      asset: AssetImage(_cataquiAssetPath, package: package),
       aspectRatio: 1,
       width: width,
       height: height,
@@ -159,17 +171,19 @@ abstract final class $ImagesCache {
   ///
   /// Returns whether the matching entry existed. [width] and [height]
   /// must match the values used to precache or render the image.
+  /// [package] must match the image widget and precache call.
   /// An image that is still displayed remains live until its last listener
   /// is removed, preventing a duplicate decode during transitions.
   static Future<bool> removeCataqui(
     BuildContext context, {
     double? width,
     double? height,
+    String? package,
   }) async {
     final configuration = createLocalImageConfiguration(context);
     final provider = _provider(
       context,
-      asset: _cataquiAsset,
+      asset: AssetImage(_cataquiAssetPath, package: package),
       aspectRatio: 1,
       width: width,
       height: height,
@@ -209,6 +223,7 @@ class _Cataqui extends StatelessWidget {
     super.key,
     this.width,
     this.height,
+    this.package,
     this.fit,
     this.alignment = Alignment.center,
     this.color,
@@ -220,6 +235,9 @@ class _Cataqui extends StatelessWidget {
 
   /// Height in logical pixels.
   final double? height;
+
+  /// Package containing the image.
+  final String? package;
 
   /// How to inscribe the image in its bounds.
   final BoxFit? fit;
@@ -303,7 +321,7 @@ class _Cataqui extends StatelessWidget {
     Color(0x09CACACA),
     Color(0x09CDCDCD),
   ];
-  static final _frameBuilder = _dotdartImageFrameBuilder(
+  static final ImageFrameBuilder _frameBuilder = _dotdartImageFrameBuilder(
     _thumbhashWidth,
     _thumbhashHeight,
     _thumbhashPixels,
@@ -320,6 +338,7 @@ class _Cataqui extends StatelessWidget {
 
     final image = Image.asset(
       _assetPath,
+      package: package,
       key: key,
       width: w,
       height: h,
