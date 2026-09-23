@@ -227,6 +227,7 @@ class _DotdartBuilder implements Builder {
       params: generator.params,
       widgetSource: generator.generateWidgetClass(),
       requiresPathMetrics: generator.requiresPathMetrics,
+      requiresTypedData: generator.requiresTypedData,
     );
   }
 

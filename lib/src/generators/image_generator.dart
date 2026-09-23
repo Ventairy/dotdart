@@ -24,6 +24,7 @@ class ImageGenerator {
     const AccessorParam(name: 'key', type: 'Key?'),
     const AccessorParam(name: 'width', type: 'double?', documentation: 'Width in logical pixels.'),
     const AccessorParam(name: 'height', type: 'double?', documentation: 'Height in logical pixels.'),
+    const AccessorParam(name: 'package', type: 'String?', documentation: 'Package containing the image.'),
     const AccessorParam(name: 'fit', type: 'BoxFit?', documentation: 'How to inscribe the image in its bounds.'),
     const AccessorParam(
       name: 'alignment',
@@ -96,7 +97,7 @@ class ImageGenerator {
       b.writeln('    Color(${_colorHex(color)}),');
     }
     b.writeln('  ];');
-    b.writeln('  static final _frameBuilder = _dotdartImageFrameBuilder(');
+    b.writeln('  static final ImageFrameBuilder _frameBuilder = _dotdartImageFrameBuilder(');
     b.writeln('    _thumbhashWidth,');
     b.writeln('    _thumbhashHeight,');
     b.writeln('    _thumbhashPixels,');
@@ -114,6 +115,7 @@ class ImageGenerator {
     b.writeln();
     b.writeln('    final image = Image.asset(');
     b.writeln('      _assetPath,');
+    b.writeln('      package: package,');
     b.writeln('      key: key,');
     b.writeln('      width: w,');
     b.writeln('      height: h,');

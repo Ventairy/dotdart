@@ -70,7 +70,10 @@ displaying many large icons with shadows.
 Supported:
 
 - shape layers with groups, paths, rectangles, ellipses, fills, and strokes
-- reusable precomposition layers
+- reusable precomposition layers, with sizes on their layers or assets
+- nested shape groups with inherited fills and strokes and animated positions
+- adjacent alpha and inverted-alpha mattes, where one layer's opacity reveals
+  or hides the next layer
 - parented layer transforms, including null controller layers
 - static text layers, including point text and paragraph boxes
 - static, non-inverted, fully opaque additive masks with zero expansion
@@ -107,8 +110,16 @@ Not supported:
 
 - image, audio, camera, or animated text layers
 - expressions, effects, precomposition time remapping, animated, translucent,
-  expanded, inverted, or non-additive masks, mattes, gradients, or 3D layers
-- nested groups beyond the supported shape-group structure
+  expanded, inverted, or non-additive masks, luminance mattes, non-adjacent
+  matte references, chains of masked matte sources, gradients, or 3D layers
+- animated group scale, rotation, anchor, or opacity; move geometric transforms
+  to layers, or flatten or precompose groups that animate opacity
+- trim paths spanning nested groups
+- paint stacks that cross an animated nested-group position when flattening would
+  duplicate or discard a fill or stroke, and parent strokes across animated,
+  scaled nested geometry; flatten the affected groups before exporting
+- partial group opacity across multiple draws or nested paint stacks that require
+  atomic compositing; flatten or precompose the affected group before exporting
 - multiple trim-path modifiers in one shape group
 - trim paths combined with reversed shape direction
 
@@ -139,6 +150,12 @@ only one dimension is supplied, dotdart derives the other from the image's
 intrinsic aspect ratio. If neither is supplied, the generated widget's default
 display size is used. Removal releases the reusable cache entry without
 discarding an image that is still being displayed.
+
+For images and GIFs generated in a dependency package, pass its name as
+`package` to the generated image widget and to both cache methods. For example,
+`$Images.profile(package: 'my_assets')` uses an image from `my_assets`. The
+package must declare the asset under `flutter: assets:`. App-owned assets can
+omit `package`.
 
 AVIF and HEIC are intentionally unsupported because their availability and
 decode behavior are not consistent across the low-end devices dotdart targets.

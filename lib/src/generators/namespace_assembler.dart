@@ -132,6 +132,7 @@ class NamespaceAssembler {
   }
 
   void _writeFindByNameMethod(StringBuffer b) {
+    final hasImages = assets.any((asset) => asset.assetType == DotdartAssetType.raster);
     b.writeln('  /// Builds the asset matching [fileName], or returns null if it is absent.');
     b.writeln('  ///');
     b.writeln('  /// Pass the original filename, including its extension and exact case.');
@@ -139,16 +140,21 @@ class NamespaceAssembler {
     b.writeln('  /// [key] is forwarded to the generated widget. [width] and [height] are');
     b.writeln('  /// logical pixels and use the same sizing rules as the named accessor.');
     b.writeln('  /// All asset-specific options keep their defaults.');
+    if (hasImages) {
+      b.writeln('  /// [package] identifies the package containing an image or GIF.');
+    }
     b.writeln('  static Widget? findByName(');
     b.writeln('    String fileName, {');
     b.writeln('    Key? key,');
     b.writeln('    double? width,');
     b.writeln('    double? height,');
+    if (hasImages) b.writeln('    String? package,');
     b.writeln('  }) => switch (fileName) {');
     for (final asset in assets) {
+      final packageArgument = asset.assetType == DotdartAssetType.raster ? ', package: package' : '';
       b.writeln(
         '    ${_fileNameLiteral(asset.sourcePath)} => '
-        '${asset.accessorName}(key: key, width: width, height: height),',
+        '${asset.accessorName}(key: key, width: width, height: height$packageArgument),',
       );
     }
     b.writeln('    _ => null,');
@@ -194,7 +200,7 @@ class NamespaceAssembler {
       if (cacheKey == null || asset.cacheAspectRatio == null) {
         throw StateError('Image asset `${asset.sourcePath}` is missing cache metadata.');
       }
-      b.writeln("  static const _${asset.accessorName}Asset = AssetImage('$cacheKey');");
+      b.writeln("  static const _${asset.accessorName}AssetPath = '$cacheKey';");
     }
     b.writeln();
 
@@ -210,23 +216,25 @@ class NamespaceAssembler {
 
   void _writeCacheMethods(StringBuffer b, GeneratedAssetSpec asset) {
     final methodSuffix = asset.accessorName[0].toUpperCase() + asset.accessorName.substring(1);
-    final assetProviderName = '_${asset.accessorName}Asset';
+    final assetPathName = '_${asset.accessorName}AssetPath';
     final aspectRatio = _formatNumber(asset.cacheAspectRatio!);
 
     b.writeln('  /// Decodes `${asset.accessorName}` before its first render.');
     b.writeln('  ///');
     b.writeln('  /// [width] and [height] are logical pixels. Pass the same values to');
     b.writeln('  /// `$_className.${asset.accessorName}` so it reuses this cache entry.');
+    b.writeln('  /// Pass the same [package] as the image widget for package assets.');
     b.writeln("  /// Omitting both values uses the widget's default display size.");
     b.writeln('  static Future<void> precache$methodSuffix(');
     b.writeln('    BuildContext context, {');
     b.writeln('    double? width,');
     b.writeln('    double? height,');
+    b.writeln('    String? package,');
     b.writeln('  }) =>');
     b.writeln('      precacheImage(');
     b.writeln('        _provider(');
     b.writeln('          context,');
-    b.writeln('          asset: $assetProviderName,');
+    b.writeln('          asset: AssetImage($assetPathName, package: package),');
     b.writeln('          aspectRatio: $aspectRatio,');
     b.writeln('          width: width,');
     b.writeln('          height: height,');
@@ -238,17 +246,19 @@ class NamespaceAssembler {
     b.writeln('  ///');
     b.writeln('  /// Returns whether the matching entry existed. [width] and [height]');
     b.writeln('  /// must match the values used to precache or render the image.');
+    b.writeln('  /// [package] must match the image widget and precache call.');
     b.writeln('  /// An image that is still displayed remains live until its last listener');
     b.writeln('  /// is removed, preventing a duplicate decode during transitions.');
     b.writeln('  static Future<bool> remove$methodSuffix(');
     b.writeln('    BuildContext context, {');
     b.writeln('    double? width,');
     b.writeln('    double? height,');
+    b.writeln('    String? package,');
     b.writeln('  }) async {');
     b.writeln('    final configuration = createLocalImageConfiguration(context);');
     b.writeln('    final provider = _provider(');
     b.writeln('      context,');
-    b.writeln('      asset: $assetProviderName,');
+    b.writeln('      asset: AssetImage($assetPathName, package: package),');
     b.writeln('      aspectRatio: $aspectRatio,');
     b.writeln('      width: width,');
     b.writeln('      height: height,');
@@ -288,6 +298,9 @@ class NamespaceAssembler {
     final docPrefix = asset.accessorName[0].toUpperCase() + asset.accessorName.substring(1);
     final fileExt = asset.assetType.documentationExtension;
     b.writeln('  /// Builds the `$docPrefix` widget from `${asset.accessorName}.$fileExt`.');
+    if (asset.assetType == DotdartAssetType.raster) {
+      b.writeln('  /// Pass [package] when this image belongs to a dependency package.');
+    }
     b.writeln('  static Widget ${asset.accessorName}({');
 
     for (var i = 0; i < asset.params.length; i++) {

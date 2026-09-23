@@ -214,6 +214,9 @@ mixin _DotdartLottieAnimationState<T extends StatefulWidget>
 /// Call a method named after each asset to render it:
 ///
 /// ```dart
+/// $Lotties.alphaMatte(<params>);
+/// ```
+/// ```dart
 /// $Lotties.cataquiJobCardsCarousel(<params>);
 /// ```
 /// ```dart
@@ -224,6 +227,33 @@ mixin _DotdartLottieAnimationState<T extends StatefulWidget>
 /// ```
 abstract final class $Lotties {
   $Lotties._();
+
+  /// Builds the `AlphaMatte` widget from `alphaMatte.json`.
+  static Widget alphaMatte({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    bool clip = true,
+    double? progress,
+    Duration delay = Duration.zero,
+    Duration? duration,
+    LottiePlayback playback = LottiePlayback.once,
+    bool respectDisableAnimations = true,
+    AlphaMatteOverrides overrides = const AlphaMatteOverrides(),
+  }) => _AlphaMatte(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    clip: clip,
+    progress: progress,
+    delay: delay,
+    duration: duration,
+    playback: playback,
+    respectDisableAnimations: respectDisableAnimations,
+    overrides: overrides,
+  );
 
   /// Builds the `CataquiJobCardsCarousel` widget from `cataquiJobCardsCarousel.json`.
   static Widget cataquiJobCardsCarousel({
@@ -320,6 +350,7 @@ abstract final class $Lotties {
     double? width,
     double? height,
   }) => switch (fileName) {
+    'alpha_matte.json' => alphaMatte(key: key, width: width, height: height),
     'cataqui_job_cards_carousel.json' => cataquiJobCardsCarousel(
       key: key,
       width: width,
@@ -329,6 +360,300 @@ abstract final class $Lotties {
     'trim_path.json' => trimPath(key: key, width: width, height: height),
     _ => null,
   };
+}
+
+/// Text and color values that replace defaults in `alpha_matte.json`.
+final class AlphaMatteOverrides {
+  /// Creates Lottie value overrides.
+  const AlphaMatteOverrides({this.maskColor, this.redColor, this.blueColor});
+
+  /// Replacement color for the `mask` Lottie layer.
+  final Color? maskColor;
+
+  /// Replacement color for the `red` Lottie layer.
+  final Color? redColor;
+
+  /// Replacement color for the `blue` Lottie layer.
+  final Color? blueColor;
+}
+
+/// A dotdart-generated animated widget from `assets/lotties/alpha_matte.json`.
+///
+/// Renders a 2000ms animation
+/// (60 frames at 30.0Hz)
+/// on a 100×100 canvas.
+/// No Lottie runtime dependency — the animation is drawn
+/// entirely via [CustomPainter].
+class _AlphaMatte extends StatefulWidget {
+  const _AlphaMatte({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.clip = true,
+    this.progress,
+    this.delay = Duration.zero,
+    this.duration,
+    this.playback = LottiePlayback.once,
+    this.respectDisableAnimations = true,
+    this.overrides = const AlphaMatteOverrides(),
+  });
+
+  static const double _lottieWidth = 100;
+  static const double _lottieHeight = 100;
+  static const int _totalFrames = 60;
+  static const Duration _nativeDuration = Duration(milliseconds: 2000);
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Whether painting is clipped to the Lottie canvas bounds.
+  final bool clip;
+
+  /// Fixed animation progress from 0 to 1.
+  final double? progress;
+
+  /// Non-negative time to wait once before automatic playback starts.
+  final Duration delay;
+
+  /// Positive total playback time. When null, uses the duration from the Lottie file.
+  final Duration? duration;
+
+  /// Whether automatic playback runs once or loops continuously.
+  final LottiePlayback playback;
+
+  /// Whether reduced-motion settings pause playback.
+  final bool respectDisableAnimations;
+
+  /// Text and color values that replace defaults from the Lottie file.
+  final AlphaMatteOverrides overrides;
+
+  @override
+  State<_AlphaMatte> createState() => _AlphaMatteState();
+}
+
+class _AlphaMatteState extends State<_AlphaMatte>
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _DotdartLottieAnimationState<_AlphaMatte> {
+  @override
+  double? get lottieWidgetWidth => widget.width;
+
+  @override
+  double? get lottieWidgetHeight => widget.height;
+
+  @override
+  bool get lottieMaintainAspectRatio => widget.maintainAspectRatio;
+
+  @override
+  double? get lottieProgress => widget.progress;
+
+  @override
+  Duration get lottieDelay => widget.delay;
+
+  @override
+  Duration? get lottieDuration => widget.duration;
+
+  @override
+  LottiePlayback get lottiePlayback => widget.playback;
+
+  @override
+  bool get lottieRespectDisableAnimations => widget.respectDisableAnimations;
+
+  @override
+  Duration get lottieNativeDuration => _AlphaMatte._nativeDuration;
+
+  @override
+  double get lottieCanvasWidth => _AlphaMatte._lottieWidth;
+
+  @override
+  double get lottieCanvasHeight => _AlphaMatte._lottieHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _AlphaMattePainter(
+            animationProgress: widget.progress == null ? _controller : null,
+            fixedProgress: (widget.progress ?? 0).clamp(0, 1).toDouble(),
+            canvasScaleX: width / _AlphaMatte._lottieWidth,
+            canvasScaleY: height / _AlphaMatte._lottieHeight,
+            canvasRect: Rect.fromLTWH(0, 0, width, height),
+            clip: widget.clip,
+            overrides: widget.overrides,
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _AlphaMattePainter extends CustomPainter {
+  _AlphaMattePainter({
+    required this._fixedProgress,
+    required this._canvasScaleX,
+    required this._canvasScaleY,
+    required this._canvasRect,
+    required this.clip,
+    required this.overrides,
+    this._animationProgress,
+  }) : super(repaint: _animationProgress);
+
+  final double _fixedProgress;
+  final double _canvasScaleX;
+  final double _canvasScaleY;
+  final Rect _canvasRect;
+  final Animation<double>? _animationProgress;
+
+  final bool clip;
+
+  final AlphaMatteOverrides overrides;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _matteContentPaint = Paint();
+  final Paint _alphaPaint = Paint()..blendMode = BlendMode.dstIn;
+  final Paint _invertedAlphaPaint = Paint()..blendMode = BlendMode.dstOut;
+
+  double _group1_0_1X(double frame) {
+    if (frame <= 0) return 0;
+    if (frame >= 60) return 25;
+    if (frame < 60) {
+      final t = frame / 60;
+      final eased = t;
+      return 0 + 25 * eased;
+    }
+    return 25;
+  }
+
+  static final RRect _rrect1_0_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(25, 50), width: 50, height: 100),
+    Radius.zero,
+  );
+  static final RRect _rrect2_0_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(50, 50), width: 100, height: 100),
+    Radius.zero,
+  );
+  static final RRect _rrect4_0_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(50, 50), width: 100, height: 100),
+    Radius.zero,
+  );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final progress = _animationProgress?.value ?? _fixedProgress;
+    final frame = math.min(59.999999, progress * _AlphaMatte._totalFrames);
+
+    canvas.save();
+    if (clip) canvas.clipRect(_canvasRect);
+    canvas.scale(_canvasScaleX, _canvasScaleY);
+
+    _draw0(canvas, frame, 1);
+
+    canvas.restore();
+  }
+
+  void _draw0(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    canvas.save();
+    canvas.clipRect(const Rect.fromLTWH(0, 0, 100, 100));
+    final matteBounds4 = canvas.getLocalClipBounds();
+    canvas.saveLayer(matteBounds4, _matteContentPaint);
+    _drawBlue4(canvas, frame, layerOpacity);
+    _erase3(canvas, frame, 1);
+    canvas.restore();
+    canvas.restore();
+  }
+
+  void _drawMask1(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group:
+    canvas.save();
+    canvas.translate(_group1_0_1X(frame), 0);
+    final fillPaint0_0 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.maskColor ?? const Color(0xff000000),
+        layerOpacity * 1,
+      );
+    canvas.drawRRect(_rrect1_0_0, fillPaint0_0);
+    canvas.restore();
+  }
+
+  void _drawRed2(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group:
+    final fillPaint0_0 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.redColor ?? const Color(0xffff0000),
+        layerOpacity * 1,
+      );
+    canvas.drawRRect(_rrect2_0_0, fillPaint0_0);
+  }
+
+  void _draw3(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    canvas.save();
+    canvas.clipRect(const Rect.fromLTWH(0, 0, 100, 100));
+    final matteBounds2 = canvas.getLocalClipBounds();
+    canvas.saveLayer(matteBounds2, _matteContentPaint);
+    _drawRed2(canvas, frame, layerOpacity);
+    canvas.saveLayer(matteBounds2, _alphaPaint);
+    _drawMask1(canvas, frame, 1);
+    canvas.restore();
+    canvas.restore();
+    canvas.restore();
+  }
+
+  void _drawBlue4(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group:
+    final fillPaint0_0 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.blueColor ?? const Color(0xff0000ff),
+        layerOpacity * 1,
+      );
+    canvas.drawRRect(_rrect4_0_0, fillPaint0_0);
+  }
+
+  void _erase3(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    canvas.save();
+    canvas.clipRect(const Rect.fromLTWH(0, 0, 100, 100));
+    final matteBounds2 = canvas.getLocalClipBounds();
+    canvas.saveLayer(matteBounds2, _invertedAlphaPaint);
+    _drawRed2(canvas, frame, layerOpacity);
+    canvas.saveLayer(matteBounds2, _alphaPaint);
+    _drawMask1(canvas, frame, 1);
+    canvas.restore();
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _AlphaMattePainter oldDelegate) {
+    return oldDelegate._fixedProgress != _fixedProgress ||
+        oldDelegate._canvasScaleX != _canvasScaleX ||
+        oldDelegate._canvasScaleY != _canvasScaleY ||
+        oldDelegate._canvasRect != _canvasRect ||
+        oldDelegate._animationProgress != _animationProgress ||
+        oldDelegate.clip != clip ||
+        oldDelegate.overrides != overrides;
+  }
 }
 
 /// Text and color values that replace defaults in `cataqui_job_cards_carousel.json`.
@@ -2905,29 +3230,9 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
     ..close();
 
-  static final Path __maskPath22_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __maskPath22_0 = __path22_4_0;
 
-  static final Path __path27_0_0 = Path()
-    ..moveTo(44, 10)
-    ..cubicTo(44, 10, 247, 10, 247, 10)
-    ..cubicTo(265.2254, 10, 280, 24.7746, 280, 43)
-    ..cubicTo(280, 43, 280, 136.045, 280, 136.045)
-    ..cubicTo(280, 154.2704, 265.2254, 169.045, 247, 169.045)
-    ..cubicTo(247, 169.045, 44, 169.045, 44, 169.045)
-    ..cubicTo(25.7746, 169.045, 11, 154.2704, 11, 136.045)
-    ..cubicTo(11, 136.045, 11, 43, 11, 43)
-    ..cubicTo(11, 24.7746, 25.7746, 10, 44, 10)
-    ..close();
+  static final Path __path27_0_0 = __path22_0_0;
 
   static final Path __path27_1_0 = Path()
     ..moveTo(291.566, 177.422)
@@ -4357,41 +4662,11 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     ..cubicTo(266.471, 349.493, 266.471, 349.493, 266.471, 349.493)
     ..close();
 
-  static final Path __path27_2_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __path27_2_0 = __path22_4_0;
 
-  static final Path __maskPath27_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __maskPath27_0 = __path22_4_0;
 
-  static final Path __path32_0_0 = Path()
-    ..moveTo(44, 10)
-    ..cubicTo(44, 10, 247, 10, 247, 10)
-    ..cubicTo(265.2254, 10, 280, 24.7746, 280, 43)
-    ..cubicTo(280, 43, 280, 136.045, 280, 136.045)
-    ..cubicTo(280, 154.2704, 265.2254, 169.045, 247, 169.045)
-    ..cubicTo(247, 169.045, 44, 169.045, 44, 169.045)
-    ..cubicTo(25.7746, 169.045, 11, 154.2704, 11, 136.045)
-    ..cubicTo(11, 136.045, 11, 43, 11, 43)
-    ..cubicTo(11, 24.7746, 25.7746, 10, 44, 10)
-    ..close();
+  static final Path __path32_0_0 = __path22_0_0;
 
   static final Path __path32_1_0 = Path()
     ..moveTo(-7, 71)
@@ -4591,41 +4866,11 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     ..cubicTo(255.821, 160.862, 255.821, 160.862, 255.821, 160.862)
     ..close();
 
-  static final Path __path32_3_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __path32_3_0 = __path22_4_0;
 
-  static final Path __maskPath32_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __maskPath32_0 = __path22_4_0;
 
-  static final Path __path37_0_0 = Path()
-    ..moveTo(44, 10)
-    ..cubicTo(44, 10, 247, 10, 247, 10)
-    ..cubicTo(265.2254, 10, 280, 24.7746, 280, 43)
-    ..cubicTo(280, 43, 280, 136.045, 280, 136.045)
-    ..cubicTo(280, 154.2704, 265.2254, 169.045, 247, 169.045)
-    ..cubicTo(247, 169.045, 44, 169.045, 44, 169.045)
-    ..cubicTo(25.7746, 169.045, 11, 154.2704, 11, 136.045)
-    ..cubicTo(11, 136.045, 11, 43, 11, 43)
-    ..cubicTo(11, 24.7746, 25.7746, 10, 44, 10)
-    ..close();
+  static final Path __path37_0_0 = __path22_0_0;
 
   static final Path __path37_1_0 = Path()
     ..moveTo(109.736, 560.636)
@@ -6533,41 +6778,11 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     ..cubicTo(338.937, 0.3751, 338.937, 0.3751, 338.937, 0.3751)
     ..close();
 
-  static final Path __path37_4_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __path37_4_0 = __path22_4_0;
 
-  static final Path __maskPath37_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __maskPath37_0 = __path22_4_0;
 
-  static final Path __path42_0_0 = Path()
-    ..moveTo(44, 10)
-    ..cubicTo(44, 10, 247, 10, 247, 10)
-    ..cubicTo(265.2254, 10, 280, 24.7746, 280, 43)
-    ..cubicTo(280, 43, 280, 136.045, 280, 136.045)
-    ..cubicTo(280, 154.2704, 265.2254, 169.045, 247, 169.045)
-    ..cubicTo(247, 169.045, 44, 169.045, 44, 169.045)
-    ..cubicTo(25.7746, 169.045, 11, 154.2704, 11, 136.045)
-    ..cubicTo(11, 136.045, 11, 43, 11, 43)
-    ..cubicTo(11, 24.7746, 25.7746, 10, 44, 10)
-    ..close();
+  static final Path __path42_0_0 = __path22_0_0;
 
   static final Path __path42_1_0 = Path()
     ..moveTo(51.3937, 391.773)
@@ -8172,41 +8387,11 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     ..cubicTo(273.937, -178.621, 273.937, -178.621, 273.937, -178.621)
     ..close();
 
-  static final Path __path42_4_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __path42_4_0 = __path22_4_0;
 
-  static final Path __maskPath42_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __maskPath42_0 = __path22_4_0;
 
-  static final Path __path47_0_0 = Path()
-    ..moveTo(44, 10)
-    ..cubicTo(44, 10, 247, 10, 247, 10)
-    ..cubicTo(265.2254, 10, 280, 24.7746, 280, 43)
-    ..cubicTo(280, 43, 280, 136.045, 280, 136.045)
-    ..cubicTo(280, 154.2704, 265.2254, 169.045, 247, 169.045)
-    ..cubicTo(247, 169.045, 44, 169.045, 44, 169.045)
-    ..cubicTo(25.7746, 169.045, 11, 154.2704, 11, 136.045)
-    ..cubicTo(11, 136.045, 11, 43, 11, 43)
-    ..cubicTo(11, 24.7746, 25.7746, 10, 44, 10)
-    ..close();
+  static final Path __path47_0_0 = __path22_0_0;
 
   static final Path __path47_1_0 = Path()
     ..moveTo(-23.264, 560.636)
@@ -10097,29 +10282,9 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     ..cubicTo(534.998, 0.4773, 534.998, 674.41, 534.998, 674.41)
     ..close();
 
-  static final Path __path47_6_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __path47_6_0 = __path22_4_0;
 
-  static final Path __maskPath47_0 = Path()
-    ..moveTo(42, 0)
-    ..cubicTo(42, 0, 248.427, 0, 248.427, 0)
-    ..cubicTo(271.623, 0, 290.427, 18.804, 290.427, 42)
-    ..cubicTo(290.427, 42, 290.427, 310.662, 290.427, 310.662)
-    ..cubicTo(290.427, 333.858, 271.623, 352.662, 248.427, 352.662)
-    ..cubicTo(248.427, 352.662, 42, 352.662, 42, 352.662)
-    ..cubicTo(18.804, 352.662, 0, 333.858, 0, 310.662)
-    ..cubicTo(0, 310.662, 0, 42, 0, 42)
-    ..cubicTo(0, 18.804, 18.804, 0, 42, 0)
-    ..close();
+  static final Path __maskPath47_0 = __path22_4_0;
 
   static final Path _compoundStrokePath22_1 = Path()
     ..addPath(__path22_1_0, Offset.zero)

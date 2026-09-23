@@ -57,6 +57,578 @@ void main() {
   );
 
   group('LottieGenerator', () {
+    test('when a parsed Lottie has only ordinary top-level groups, it should retain primitive drawing fast paths', () {
+      final parsed = LottieParser.parse(File('example/assets/lotties/pulse.json').readAsStringSync()).animation;
+      final code = LottieGenerator(parsed, 'assets/lotties/pulse.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('static final RRect _rrect0_0_0'),
+          contains('canvas.drawRRect(_rrect0_0_0, fillPaint0_0);'),
+          isNot(contains('_treePaintPath')),
+        ),
+      );
+    });
+
+    test('when one parent paint crosses a partially transparent child, it should retain the exact flat path', () {
+      const shape = LottieRect(positionX: 20, positionY: 20, width: 20, height: 20, cornerRadius: 0);
+      const transform = LottieGroupTransform(opacity: 50);
+      const fill = LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100);
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Exact flat opacity',
+        layers: [
+          LottieLayer(
+            name: 'Layer',
+            shapeGroups: [
+              LottieGroup(name: 'Child', items: [shape, transform, fill]),
+            ],
+            shapeTree: LottieGroup(
+              name: 'Root',
+              items: [
+                LottieGroup(
+                  name: 'Parent',
+                  items: [
+                    LottieGroup(name: 'Child', items: [shape, transform]),
+                    fill,
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(animation, 'assets/lotties/exact_flat_opacity.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('canvas.drawRRect(_rrect0_0_0, fillPaint0_0);'),
+          contains('layerOpacity * 0.5'),
+          isNot(contains('_treePaintPath')),
+        ),
+      );
+    });
+
+    test('when a parent stroke crosses scaled nested geometry, it should keep the stroke width unscaled', () {
+      const shape = LottieRect(positionX: 20, positionY: 20, width: 20, height: 20, cornerRadius: 0);
+      const transform = LottieGroupTransform(scaleX: 200, scaleY: 200);
+      const stroke = LottieStroke(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100, width: 4);
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Nested stroke scale',
+        layers: [
+          LottieLayer(
+            name: 'Layer',
+            shapeGroups: [
+              LottieGroup(name: 'Child', items: [shape, transform, stroke]),
+            ],
+            shapeTree: LottieGroup(
+              name: 'Root',
+              items: [
+                LottieGroup(
+                  name: 'Parent',
+                  items: [
+                    LottieGroup(name: 'Child', items: [shape, transform]),
+                    stroke,
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(animation, 'assets/lotties/nested_stroke_scale.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('_treePaintPath0_1_1'),
+          contains('..strokeWidth = 4'),
+          isNot(contains('canvas.scale(2, 2)')),
+        ),
+      );
+    });
+
+    test('when a layer is statically transparent, it should omit its geometry and reusable paints', () {
+      const transparentLayer = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Transparent layer',
+        layers: [
+          LottieLayer(
+            name: 'Hidden layer',
+            shapeGroups: [
+              LottieGroup(
+                name: 'Shape',
+                items: [
+                  LottieRect(positionX: 20, positionY: 20, width: 20, height: 20, cornerRadius: 0),
+                  LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
+                ],
+              ),
+            ],
+            opacity: LottieAnimatedScalar(animated: false, staticValue: 0),
+            positionX: LottieAnimatedScalar(
+              animated: true,
+              keyframes: [
+                LottieScalarKeyframe(
+                  time: 0,
+                  start: 0,
+                  end: 20,
+                  outX: 0.25,
+                  outY: 0.1,
+                  inX: 0.75,
+                  inY: 0.9,
+                ),
+                LottieScalarKeyframe(time: 60, start: 20),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(transparentLayer, 'assets/lotties/transparent_layer.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('final Color? hiddenLayerColor;'),
+          isNot(contains('final Paint _fillPaint')),
+          isNot(contains('static final RRect _rrect0_0_0')),
+          isNot(contains('void _drawHiddenLayer0')),
+          isNot(contains('_keyframes0PositionX')),
+          isNot(contains('_transformCurve0')),
+        ),
+      );
+    });
+
+    test('when a text layer is statically transparent, it should omit its painter cache', () {
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Transparent text',
+        layers: [
+          LottieLayer(
+            name: 'Hidden',
+            shapeGroups: [],
+            text: LottieText(
+              value: 'hidden',
+              fontFamily: 'sans-serif',
+              fontWeight: 400,
+              italic: false,
+              fontSize: 20,
+              lineHeight: 24,
+              tracking: 0,
+              justification: 0,
+              colorR: 1,
+              colorG: 1,
+              colorB: 1,
+              colorA: 1,
+            ),
+            opacity: LottieAnimatedScalar(animated: false, staticValue: 0),
+          ),
+        ],
+      );
+      final code = LottieGenerator(animation, 'assets/lotties/transparent_text.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('final String? hiddenText;'),
+          contains('final Color? hiddenTextColor;'),
+          isNot(contains('_textPainter0')),
+          isNot(contains('Painter? _painter')),
+          isNot(contains('disposeResources')),
+        ),
+      );
+    });
+
+    test('when a matte precomposition is unreachable, it should omit its rendering work', () {
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Unreachable matte',
+        layers: [],
+        compositions: {
+          'unused': LottieComposition(
+            id: 'unused',
+            width: 100,
+            height: 100,
+            layers: [
+              LottieLayer(
+                name: 'Unused matte source',
+                shapeGroups: [
+                  LottieGroup(
+                    name: 'Source shape',
+                    items: [
+                      LottieRect(positionX: 50, positionY: 50, width: 40, height: 40, cornerRadius: 0),
+                      LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
+                    ],
+                  ),
+                ],
+              ),
+              LottieLayer(
+                name: 'Unused matte target',
+                shapeGroups: [
+                  LottieGroup(
+                    name: 'Target shape',
+                    items: [
+                      LottieRect(positionX: 50, positionY: 50, width: 80, height: 80, cornerRadius: 0),
+                      LottieFill(colorR: 0, colorG: 0, colorB: 1, colorA: 1, opacity: 100),
+                    ],
+                  ),
+                ],
+                matte: LottieMatte.alpha,
+              ),
+              LottieLayer(
+                name: 'Unused text',
+                shapeGroups: [],
+                text: LottieText(
+                  value: 'unused',
+                  fontFamily: 'sans-serif',
+                  fontWeight: 400,
+                  italic: false,
+                  fontSize: 20,
+                  lineHeight: 24,
+                  tracking: 0,
+                  justification: 0,
+                  colorR: 1,
+                  colorG: 1,
+                  colorB: 1,
+                  colorA: 1,
+                ),
+              ),
+            ],
+          ),
+        },
+      );
+      final code = LottieGenerator(animation, 'assets/lotties/unreachable_matte.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          isNot(contains('_matteContentPaint')),
+          isNot(contains('_alphaPaint')),
+          isNot(contains('void _drawUnusedMatteSource')),
+          isNot(contains('void _drawUnusedMatteTarget')),
+          isNot(contains('unusedText')),
+          isNot(contains('_textPainter2')),
+          isNot(contains('disposeResources')),
+        ),
+      );
+    });
+
+    test('when a precomposition wrapper is statically hidden, it should omit its subtree', () {
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Hidden precomposition',
+        layers: [
+          LottieLayer(
+            name: 'Hidden wrapper',
+            shapeGroups: [],
+            referenceId: 'hidden',
+            opacity: LottieAnimatedScalar(animated: false, staticValue: 0),
+          ),
+        ],
+        compositions: {
+          'hidden': LottieComposition(
+            id: 'hidden',
+            width: 100,
+            height: 100,
+            layers: [
+              LottieLayer(
+                name: 'Dead shape',
+                shapeGroups: [
+                  LottieGroup(
+                    name: 'Shape',
+                    items: [
+                      LottieRect(positionX: 50, positionY: 50, width: 80, height: 80, cornerRadius: 0),
+                      LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        },
+      );
+      final code = LottieGenerator(animation, 'assets/lotties/hidden_precomp.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          isNot(contains('final Paint _fillPaint')),
+          isNot(contains('static final RRect _rrect1_0_0')),
+          isNot(contains('void _drawDeadShape1')),
+          isNot(contains('deadShapeColor')),
+        ),
+      );
+    });
+
+    test('when an alpha-matte target precomposition is empty, it should omit the source precomposition subtree', () {
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Empty matte target',
+        layers: [
+          LottieLayer(name: 'Matte source', shapeGroups: [], referenceId: 'matte'),
+          LottieLayer(
+            name: 'Empty target',
+            shapeGroups: [],
+            referenceId: 'empty',
+            matte: LottieMatte.alpha,
+          ),
+        ],
+        compositions: {
+          'matte': LottieComposition(
+            id: 'matte',
+            width: 100,
+            height: 100,
+            layers: [
+              LottieLayer(
+                name: 'Dead nested',
+                shapeGroups: [
+                  LottieGroup(
+                    name: 'Nested shape',
+                    items: [
+                      LottieRect(positionX: 50, positionY: 50, width: 40, height: 40, cornerRadius: 0),
+                      LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          'empty': LottieComposition(id: 'empty', width: 100, height: 100, layers: []),
+        },
+      );
+      final code = LottieGenerator(animation, 'assets/lotties/empty_matte_target.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          isNot(contains('deadNestedColor')),
+          isNot(contains('_rrect2_0_0')),
+          isNot(contains('void _drawDeadNested2')),
+          isNot(contains('_matteContentPaint')),
+        ),
+      );
+    });
+
+    test('when nested paints share an animated ancestor, it should compound each paint and evaluate it once', () {
+      final animation = LottieParser.parse(
+        File('test/fixtures/generated_consumer/assets/lotties/nested_shape_paints.json').readAsStringSync(),
+      ).animation;
+      final generator = LottieGenerator(animation, 'assets/lotties/nested_shape_paints.json');
+
+      final code = generator.generateWidgetClass();
+
+      expect(
+        (
+          RegExp(r'double _treeGroup\d+_\d+_\d+X\(double frame\)').allMatches(code).length,
+          RegExp(r'canvas\.translate\(_treeGroup\d+_\d+_\d+X\(frame\), 0\)').allMatches(code).length,
+          RegExp(r'canvas\.drawPath\(_treePaintPath').allMatches(code).length,
+          RegExp(r'\.\.addRRect\(').allMatches(code).length,
+          generator.requiresTypedData,
+        ),
+        (1, 1, 2, 4, false),
+      );
+    });
+
+    test('when generating nested alpha mattes, it should isolate both mask types within the current clip', () {
+      final animation = LottieParser.parse(
+        File('example/assets/lotties/alpha_matte.json').readAsStringSync(),
+      ).animation;
+      final code = LottieGenerator(animation, 'alpha_matte.json').generateWidgetClass();
+      final rootMethod = code.substring(code.indexOf('void _draw0'), code.indexOf('void _drawMask1'));
+      final eraseMethod = code.substring(
+        code.indexOf('void _erase3'),
+        code.indexOf('  @override', code.indexOf('void _erase3')),
+      );
+
+      expect(
+        (
+          RegExp(r'canvas\.saveLayer\(').allMatches(rootMethod).length,
+          RegExp(r'getLocalClipBounds\(\)').allMatches(rootMethod).length,
+          RegExp(r'canvas\.saveLayer\(').allMatches(eraseMethod).length,
+          RegExp(r'getLocalClipBounds\(\)').allMatches(eraseMethod).length,
+          rootMethod.contains('_erase3(canvas, frame, 1);'),
+          eraseMethod.contains('canvas.saveLayer(matteBounds2, _invertedAlphaPaint);'),
+          eraseMethod.contains('canvas.saveLayer(matteBounds2, _alphaPaint);'),
+          code.contains('Radius.zero') && !code.contains('Radius.circular(0)'),
+        ),
+        (1, 1, 2, 1, true, true, true, true),
+      );
+    });
+
+    test(
+      'when an inverted matte has overlapping translucent vector draws, it should retain the exact two-layer path',
+      () {
+        final animation = LottieParser.parse(
+          File(
+            'test/fixtures/generated_consumer/assets/lotties/inverted_matte_overlap.json',
+          ).readAsStringSync(),
+        ).animation;
+        final code = LottieGenerator(animation, 'inverted_matte_overlap.json').generateWidgetClass();
+        final guard = code.indexOf('if (frame >= 10 && frame < 20) {');
+        final bounds = code.indexOf('final matteBounds1 = canvas.getLocalClipBounds();');
+
+        expect(
+          (
+            RegExp(r'canvas\.saveLayer\(').allMatches(code).length,
+            RegExp(r'getLocalClipBounds\(\)').allMatches(code).length,
+            RegExp(r'= _eraseFillPaint\.\.color').allMatches(code).length,
+            code.contains('final Paint _eraseFillPaint'),
+            code.contains('final Paint _eraseStrokePaint'),
+            code.contains('final Paint _invertedAlphaPaint'),
+            guard >= 0 && guard < bounds,
+            code.contains('} else {\n      _drawBlueTarget1(canvas, frame, 1);'),
+          ),
+          (2, 1, 0, false, false, true, true, true),
+        );
+      },
+    );
+
+    test('when an inverted source contains a text matte pair, it should fuse only the isolated pair result', () {
+      final parsed = LottieParser.parse(
+        File('example/assets/lotties/alpha_matte.json').readAsStringSync(),
+      ).animation;
+      final inner = parsed.compositions['inner']!;
+      final animation = LottieAnimation(
+        width: parsed.width,
+        height: parsed.height,
+        frameRate: parsed.frameRate,
+        inPoint: parsed.inPoint,
+        outPoint: parsed.outPoint,
+        name: parsed.name,
+        layers: parsed.layers,
+        compositions: {
+          ...parsed.compositions,
+          'inner': LottieComposition(
+            id: inner.id,
+            width: inner.width,
+            height: inner.height,
+            layers: [
+              const LottieLayer(
+                name: 'Text matte',
+                shapeGroups: [],
+                text: LottieText(
+                  value: 'mask',
+                  fontFamily: 'sans-serif',
+                  fontWeight: 400,
+                  italic: false,
+                  fontSize: 20,
+                  lineHeight: 24,
+                  tracking: 0,
+                  justification: 0,
+                  colorR: 1,
+                  colorG: 1,
+                  colorB: 1,
+                  colorA: 1,
+                ),
+                inPoint: 0,
+                outPoint: 60,
+              ),
+              inner.layers[1],
+            ],
+          ),
+        },
+      );
+      final code = LottieGenerator(animation, 'nested_text_matte.json').generateWidgetClass();
+      final rootMethod = code.substring(code.indexOf('void _draw0'), code.indexOf('void _drawTextMatte1'));
+      final eraseMethod = code.substring(
+        code.indexOf('void _erase3'),
+        code.indexOf('  @override', code.indexOf('void _erase3')),
+      );
+
+      expect(
+        (
+          RegExp(r'canvas\.saveLayer\(').allMatches(rootMethod).length,
+          RegExp(r'canvas\.saveLayer\(').allMatches(eraseMethod).length,
+          rootMethod.contains('_erase3(canvas, frame, 1);'),
+          eraseMethod.contains('_drawTextMatte1(canvas, frame, 1);'),
+          code.contains('void _eraseTextMatte1'),
+        ),
+        (1, 2, true, true, false),
+      );
+    });
+
+    test('when an alpha matte source is vector-only, it should retain the exact two-layer path', () {
+      final source = File(
+        'test/fixtures/generated_consumer/assets/lotties/inverted_matte_overlap.json',
+      ).readAsStringSync().replaceFirst('"tt": 2', '"tt": 1');
+      final animation = LottieParser.parse(source).animation;
+      final code = LottieGenerator(animation, 'alpha_matte_overlap.json').generateWidgetClass();
+
+      expect(
+        (
+          RegExp(r'canvas\.saveLayer\(').allMatches(code).length,
+          RegExp(r'getLocalClipBounds\(\)').allMatches(code).length,
+          code.contains('_alphaPaint'),
+          code.contains('_eraseFillPaint'),
+        ),
+        (2, 1, true, false),
+      );
+    });
+
+    test('when an inverted matte source is statically empty, it should omit compositing at build time', () {
+      final source = File(
+        'test/fixtures/generated_consumer/assets/lotties/inverted_matte_overlap.json',
+      ).readAsStringSync().replaceAll('"o": { "k": 50 }', '"o": { "k": 0 }');
+      final animation = LottieParser.parse(source).animation;
+      final code = LottieGenerator(animation, 'empty_inverted_matte.json').generateWidgetClass();
+
+      expect(
+        (
+          RegExp(r'canvas\.saveLayer\(').allMatches(code).length,
+          code.contains('void _drawOverlappingTranslucentSource0'),
+          code.contains('_drawBlueTarget1(canvas, frame, 1);'),
+        ),
+        (0, false, true),
+      );
+    });
+
+    test('when an inverted matte source has an empty frame range, it should omit compositing at build time', () {
+      final source = File(
+        'test/fixtures/generated_consumer/assets/lotties/inverted_matte_overlap.json',
+      ).readAsStringSync().replaceFirst('"op": 20', '"op": 10');
+      final animation = LottieParser.parse(source).animation;
+      final code = LottieGenerator(animation, 'empty_range_inverted_matte.json').generateWidgetClass();
+
+      expect(
+        (
+          RegExp(r'canvas\.saveLayer\(').allMatches(code).length,
+          code.contains('void _drawOverlappingTranslucentSource0'),
+          code.contains('_drawBlueTarget1(canvas, frame, 1);'),
+        ),
+        (0, false, true),
+      );
+    });
+
     test('when generating an animated trim path, it should extract the visible path segment', () {
       final source = File('example/assets/lotties/trim_path.json').readAsStringSync();
       final animation = LottieParser.parse(source).animation;
@@ -1315,6 +1887,87 @@ void main() {
 
       expect(code, contains('PathFillType.evenOdd'));
     });
+
+    test('when transformed hierarchy paths share geometry, it should compile one path object', () {
+      const firstPath = LottiePath(
+        vertices: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+        ],
+        inTangents: [
+          [0, 0],
+          [0, 0],
+          [0, 0],
+        ],
+        outTangents: [
+          [0, 0],
+          [0, 0],
+          [0, 0],
+        ],
+        closed: true,
+      );
+      final secondPath = LottiePath(
+        vertices: [
+          for (final point in firstPath.vertices) [...point],
+        ],
+        inTangents: [
+          for (final point in firstPath.inTangents) [...point],
+        ],
+        outTangents: [
+          for (final point in firstPath.outTangents) [...point],
+        ],
+        closed: true,
+      );
+      final deduplicatedPathAnimation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Shared Paths',
+        layers: [
+          LottieLayer(
+            name: 'Layer',
+            shapeGroups: [],
+            shapeTree: LottieGroup(
+              name: 'Root',
+              items: [
+                const LottieGroup(
+                  name: 'First',
+                  items: [
+                    firstPath,
+                    LottieGroupTransform(positionX: 10),
+                  ],
+                ),
+                LottieGroup(
+                  name: 'Second',
+                  items: [
+                    secondPath,
+                    const LottieGroupTransform(positionX: 20),
+                  ],
+                ),
+                const LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(
+        deduplicatedPathAnimation,
+        'assets/lottie/shared_paths.json',
+      ).generateWidgetClass();
+
+      expect(
+        (
+          identical(firstPath, secondPath),
+          RegExp(r'static final Path __treePath\d+_\d+_\d+ = Path\(\)').allMatches(code).length,
+          RegExp(r'static final Path __treePath\d+_\d+_\d+ = __treePath\d+_\d+_\d+;').allMatches(code).length,
+          RegExp('matrix4:').allMatches(code).length,
+        ),
+        (false, 1, 1, 2),
+      );
+    });
   });
 
   group('LottieGenerator animated keyframes', () {
@@ -1374,6 +2027,43 @@ void main() {
       final code = generator.generateWidgetClass();
 
       expect(code, isNot(contains('const Cubic(')));
+    });
+
+    test('when easing handles lie on the diagonal, it should interpolate directly', () {
+      const identityEasingAnimation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Identity Easing',
+        layers: [
+          LottieLayer(
+            name: 'Anim Layer',
+            shapeGroups: [],
+            opacity: LottieAnimatedScalar(
+              animated: true,
+              keyframes: [
+                LottieScalarKeyframe(time: 0, start: 100, end: 0, outX: 0.25, outY: 0.25, inX: 0.75, inY: 0.75),
+                LottieScalarKeyframe(time: 60, start: 0),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(
+        identityEasingAnimation,
+        'assets/lottie/identity_easing.json',
+      ).generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('final eased = t;'),
+          isNot(contains('_transformCurve')),
+          isNot(contains('const Cubic(')),
+        ),
+      );
     });
 
     test('when animated properties share easing, it should solve the cubic only once for the same progress', () {
@@ -1868,10 +2558,10 @@ void main() {
             shapeGroups: [
               LottieGroup(
                 name: 'Hidden',
+                ancestorTransforms: [LottieGroupTransform(opacity: 0)],
                 items: [
                   LottieRect(positionX: 0, positionY: 0, width: 20, height: 20, cornerRadius: 0),
-                  LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
-                  LottieGroupTransform(opacity: 0),
+                  LottieStroke(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100, width: 2),
                 ],
               ),
               LottieGroup(
@@ -1889,7 +2579,255 @@ void main() {
       final generator = LottieGenerator(transparentGroupAnimation, 'assets/lottie/transparent_group.json');
       final code = generator.generateWidgetClass();
 
-      expect(code, allOf(isNot(contains('Group: Hidden')), contains('Group: Visible')));
+      expect(
+        code,
+        allOf(
+          isNot(contains('Group: Hidden')),
+          isNot(contains('_rrect0_0_0')),
+          isNot(contains('_strokePaint')),
+          contains('Group: Visible'),
+          contains('_rrect0_1_0'),
+        ),
+      );
+    });
+
+    test('when a hierarchy is fully transparent, it should omit its empty draw method and resources', () {
+      const animation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Transparent hierarchy',
+        layers: [
+          LottieLayer(
+            name: 'Hidden layer',
+            shapeGroups: [],
+            shapeTree: LottieGroup(
+              name: 'Root',
+              items: [
+                LottieGroup(
+                  name: 'Hidden',
+                  items: [
+                    LottieRect(positionX: 0, positionY: 0, width: 20, height: 20, cornerRadius: 0),
+                    LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 100),
+                    LottieGroupTransform(opacity: 0),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(animation, 'assets/lottie/transparent_hierarchy.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('final Color? hiddenLayerColor;'),
+          isNot(contains('_fillPaint')),
+          isNot(contains('_treePaintPath')),
+          isNot(contains('void _drawHiddenLayer0')),
+        ),
+      );
+    });
+
+    test('when flat paints have zero opacity, it should omit their layer and path data', () {
+      const hiddenPaintAnimation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Hidden Paints',
+        layers: [
+          LottieLayer(
+            name: 'Hidden Layer',
+            shapeGroups: [
+              LottieGroup(
+                name: 'Hidden Group',
+                items: [
+                  LottiePath(
+                    vertices: [
+                      [0, 0],
+                      [10, 0],
+                      [10, 10],
+                    ],
+                    inTangents: [
+                      [0, 0],
+                      [0, 0],
+                      [0, 0],
+                    ],
+                    outTangents: [
+                      [0, 0],
+                      [0, 0],
+                      [0, 0],
+                    ],
+                    closed: true,
+                  ),
+                  LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 0),
+                  LottieStroke(colorR: 0, colorG: 0, colorB: 1, colorA: 1, opacity: 0, width: 2),
+                ],
+              ),
+            ],
+            masks: [
+              LottiePath(
+                vertices: [
+                  [0, 0],
+                  [20, 0],
+                  [20, 20],
+                ],
+                inTangents: [
+                  [0, 0],
+                  [0, 0],
+                  [0, 0],
+                ],
+                outTangents: [
+                  [0, 0],
+                  [0, 0],
+                  [0, 0],
+                ],
+                closed: true,
+              ),
+            ],
+          ),
+        ],
+      );
+      final code = LottieGenerator(hiddenPaintAnimation, 'assets/lottie/hidden_paints.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          isNot(contains('void _drawHiddenLayer0')),
+          isNot(contains('static final Path __path0_0_0')),
+          isNot(contains('static final Path __maskPath0_0')),
+          isNot(contains('final Paint _fillPaint')),
+          isNot(contains('final Paint _strokePaint')),
+        ),
+      );
+    });
+
+    test('when a visible paint has transparent default color, it should keep its override and draw', () {
+      const transparentDefaultAnimation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Transparent Default',
+        layers: [
+          LottieLayer(
+            name: 'Layer',
+            shapeGroups: [
+              LottieGroup(
+                name: 'Group',
+                items: [
+                  LottieRect(positionX: 5, positionY: 5, width: 10, height: 10, cornerRadius: 0),
+                  LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 0, opacity: 100),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final code = LottieGenerator(
+        transparentDefaultAnimation,
+        'assets/lottie/transparent_default.json',
+      ).generateWidgetClass();
+
+      expect(
+        code,
+        allOf(
+          contains('final Color? layerColor;'),
+          contains('canvas.drawRRect('),
+          contains('overrides.layerColor ?? const Color(0x00ff0000)'),
+        ),
+      );
+    });
+
+    test('when a nested paint has zero opacity, it should omit only its hierarchy branch', () {
+      const nestedPaintAnimation = LottieAnimation(
+        width: 100,
+        height: 100,
+        frameRate: 60,
+        inPoint: 0,
+        outPoint: 60,
+        name: 'Nested Paints',
+        layers: [
+          LottieLayer(
+            name: 'Layer',
+            shapeGroups: [],
+            shapeTree: LottieGroup(
+              name: 'Root',
+              items: [
+                LottieGroup(
+                  name: 'Hidden',
+                  items: [
+                    LottiePath(
+                      vertices: [
+                        [0, 0],
+                        [10, 0],
+                        [10, 10],
+                      ],
+                      inTangents: [
+                        [0, 0],
+                        [0, 0],
+                        [0, 0],
+                      ],
+                      outTangents: [
+                        [0, 0],
+                        [0, 0],
+                        [0, 0],
+                      ],
+                      closed: true,
+                    ),
+                    LottieFill(colorR: 1, colorG: 0, colorB: 0, colorA: 1, opacity: 0),
+                  ],
+                ),
+                LottieGroup(
+                  name: 'Visible',
+                  items: [
+                    LottiePath(
+                      vertices: [
+                        [20, 20],
+                        [30, 20],
+                        [30, 30],
+                      ],
+                      inTangents: [
+                        [0, 0],
+                        [0, 0],
+                        [0, 0],
+                      ],
+                      outTangents: [
+                        [0, 0],
+                        [0, 0],
+                        [0, 0],
+                      ],
+                      closed: true,
+                    ),
+                    LottieFill(colorR: 0, colorG: 1, colorB: 0, colorA: 1, opacity: 100),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+      final code = LottieGenerator(nestedPaintAnimation, 'assets/lottie/nested_paints.json').generateWidgetClass();
+
+      expect(
+        code,
+        allOf([
+          isNot(contains('static final Path __treePath0_1_0')),
+          isNot(contains('// Group: Hidden')),
+          contains('static final Path __treePath0_2_0'),
+          contains('// Group: Visible'),
+          contains('final Color? layerColor1;'),
+          contains('final Color? layerColor2;'),
+          contains('overrides.layerColor2 ?? const Color(0xff00ff00)'),
+          predicate<String>((value) => RegExp(r'canvas\.drawPath\(_treePaintPath').allMatches(value).length == 1),
+        ]),
+      );
     });
   });
 

@@ -116,8 +116,8 @@ class LottieParser {
       );
       compositions[entry.key] = LottieComposition(
         id: entry.key,
-        width: _requiredPositiveInt(asset, 'w'),
-        height: _requiredPositiveInt(asset, 'h'),
+        width: _optionalPositiveInt(asset, 'w', path: '\$.assets["${entry.key}"]'),
+        height: _optionalPositiveInt(asset, 'h', path: '\$.assets["${entry.key}"]'),
         layers: layers,
       );
     }
@@ -131,6 +131,16 @@ class LottieParser {
       compositionIds: compositionIds,
       path: r'$.layers',
     );
+
+    for (final layer in [...layers, for (final composition in compositions.values) ...composition.layers]) {
+      final reference = compositions[layer.referenceId];
+      if (reference == null) continue;
+      if ((layer.width ?? reference.width) == null || (layer.height ?? reference.height) == null) {
+        throw DotdartInvalidLottieException(
+          'Expected positive w and h on the layer referencing asset "${reference.id}" or on that asset.',
+        );
+      }
+    }
 
     return LottieParseResult(
       animation: LottieAnimation(
@@ -155,6 +165,10 @@ class LottieParser {
     required String path,
   }) {
     final layers = <LottieLayer>[];
+    final matteSourceIndexes = <int>{
+      for (var index = 1; index < rawLayers.length; index++)
+        if (_requiredMap(rawLayers[index], path: '$path[$index]')['tt'] case 1 || 2) index - 1,
+    };
     for (var index = 0; index < rawLayers.length; index++) {
       final layerPath = '$path[$index]';
       final layer = _parseLayer(
@@ -164,7 +178,22 @@ class LottieParser {
         compositionIds: compositionIds,
         path: layerPath,
       );
+      if (layer == null &&
+          (matteSourceIndexes.contains(index) ||
+              const [1, 2].contains(_requiredMap(rawLayers[index], path: layerPath)['tt']))) {
+        throw DotdartUnsupportedFeatureException('$layerPath uses an unsupported layer type in a matte pair.');
+      }
+      final raw = _requiredMap(rawLayers[index], path: layerPath);
+      if (raw['td'] != null && raw['td'] != 0 && !matteSourceIndexes.contains(index)) {
+        throw DotdartUnsupportedFeatureException('$layerPath.td needs an adjacent masked layer.');
+      }
       if (layer != null) layers.add(layer);
+    }
+    for (var index = 0; index < layers.length; index++) {
+      if (layers[index].matte == LottieMatte.none) continue;
+      if (index == 0 || layers[index - 1].matte != LottieMatte.none) {
+        throw DotdartUnsupportedFeatureException('$path[$index] needs a preceding, unmasked alpha matte layer.');
+      }
     }
     _validateLayerParents(layers, path: path);
     return layers;
@@ -177,6 +206,15 @@ class LottieParser {
     required Set<String> compositionIds,
     required String path,
   }) {
+    if (raw['tp'] != null) {
+      throw DotdartUnsupportedFeatureException('$path uses a non-adjacent matte reference (tp).');
+    }
+    final matte = switch (raw['tt']) {
+      null || 0 => LottieMatte.none,
+      1 => LottieMatte.alpha,
+      2 => LottieMatte.invertedAlpha,
+      _ => throw DotdartUnsupportedFeatureException('$path.tt supports only alpha and inverted-alpha mattes.'),
+    };
     final ty = raw['ty'] as int?;
     if (ty == null) return null;
 
@@ -199,31 +237,54 @@ class LottieParser {
       throw DotdartUnsupportedFeatureException('$path uses precomposition time remapping.');
     }
 
+    LottieGroup? shapeTree;
     final shapeGroups = <LottieGroup>[];
-    for (var index = 0; index < shapesRaw.length; index++) {
-      final shapePath = '$path.shapes[$index]';
-      final group = _parseShapeGroup(_requiredMap(shapesRaw[index], path: shapePath), warnings, path: shapePath);
-      if (group != null) {
-        shapeGroups.add(group);
+    if (shapesRaw.isNotEmpty) {
+      final parsedTree = _parseShapeGroup({'ty': 'gr', 'it': shapesRaw}, warnings, path: '$path.shapes');
+      if (parsedTree != null) {
+        final flattenedGroups = _flattenGroups(parsedTree);
+        _validateAnimatedNestedPaints(
+          parsedTree,
+          flattenedGroups,
+          path: '$path.shapes',
+        );
+        _validateTrimmedNestedPaints(
+          parsedTree,
+          flattenedGroups,
+          path: '$path.shapes',
+        );
+        _validateNestedGroupOpacity(
+          parsedTree,
+          flattenedGroups,
+          path: '$path.shapes',
+        );
+        shapeTree = parsedTree;
+        shapeGroups.addAll(flattenedGroups);
       }
     }
+
+    final position = ks['p'] as Map<String, dynamic>?;
 
     return LottieLayer(
       name: nm,
       shapeGroups: shapeGroups,
+      shapeTree: shapeTree,
       layerIndex: _optionalInt(raw['ind'], path: '$path.ind'),
       parentIndex: _optionalInt(raw['parent'], path: '$path.parent'),
       referenceId: referenceId,
+      width: ty == 0 ? _optionalPositiveInt(raw, 'w', path: path) : null,
+      height: ty == 0 ? _optionalPositiveInt(raw, 'h', path: path) : null,
+      matte: matte,
       text: ty == 5 ? _parseText(raw, fonts, path: path) : null,
       masks: _parseMasks(raw['masksProperties'], path: '$path.masksProperties'),
       opacity: _parseAnimatedScalar(ks['o'] as Map<String, dynamic>?),
-      rotation: _parseAnimatedScalar(ks['r'] as Map<String, dynamic>?),
-      positionX: _parseAnimatedScalarFromArray(ks['p'] as Map<String, dynamic>?, 0),
-      positionY: _parseAnimatedScalarFromArray(ks['p'] as Map<String, dynamic>?, 1),
+      rotation: ks['r'] == null ? null : _parseAnimatedScalar(ks['r'] as Map<String, dynamic>?),
+      positionX: _parsePositionAxis(position, 0, path: '$path.ks.p'),
+      positionY: _parsePositionAxis(position, 1, path: '$path.ks.p'),
       anchorX: _parseStaticArrayValue(ks['a'] as Map<String, dynamic>?, 0),
       anchorY: _parseStaticArrayValue(ks['a'] as Map<String, dynamic>?, 1),
-      scaleX: _parseAnimatedScalarFromArray(ks['s'] as Map<String, dynamic>?, 0),
-      scaleY: _parseAnimatedScalarFromArray(ks['s'] as Map<String, dynamic>?, 1),
+      scaleX: ks['s'] == null ? null : _parseAnimatedScalarFromArray(ks['s'] as Map<String, dynamic>?, 0),
+      scaleY: ks['s'] == null ? null : _parseAnimatedScalarFromArray(ks['s'] as Map<String, dynamic>?, 1),
       inPoint: ip,
       outPoint: op,
       startTime: (raw['st'] as num?)?.toDouble() ?? 0,
@@ -233,10 +294,11 @@ class LottieParser {
 
   static void _validateLayerParents(List<LottieLayer> layers, {required String path}) {
     final layersByIndex = <int, LottieLayer>{};
+    final parentIndexes = layers.map((layer) => layer.parentIndex).whereType<int>().toSet();
     for (final layer in layers) {
       final layerIndex = layer.layerIndex;
       if (layerIndex == null) continue;
-      if (layersByIndex.containsKey(layerIndex)) {
+      if (layersByIndex.containsKey(layerIndex) && parentIndexes.contains(layerIndex)) {
         throw DotdartInvalidLottieException('Expected unique layer indexes at $path; found duplicate ind $layerIndex.');
       }
       layersByIndex[layerIndex] = layer;
@@ -260,6 +322,15 @@ class LottieParser {
         }
         parentIndex = parent.parentIndex;
       }
+    }
+  }
+
+  static int? _optionalPositiveInt(Map<String, dynamic> raw, String key, {required String path}) {
+    if (!raw.containsKey(key)) return null;
+    try {
+      return _requiredPositiveInt(raw, key);
+    } on DotdartInvalidLottieException {
+      throw DotdartInvalidLottieException('Expected $path.$key to be a positive number.');
     }
   }
 
@@ -461,6 +532,254 @@ class LottieParser {
     return LottieGroup(name: nm, items: items);
   }
 
+  static List<LottieGroup> _flattenGroups(
+    LottieGroup group, {
+    List<LottieGroupTransform> ancestors = const [],
+    LottieFill? inheritedFill,
+    LottieStroke? inheritedStroke,
+  }) {
+    final transforms = [...ancestors, ...group.items.whereType<LottieGroupTransform>()];
+    final fill = group.items.whereType<LottieFill>().lastOrNull ?? inheritedFill;
+    final stroke = group.items.whereType<LottieStroke>().lastOrNull ?? inheritedStroke;
+    if (!group.items.any((item) => item is LottieGroup)) {
+      return [
+        LottieGroup(
+          name: group.name,
+          ancestorTransforms: ancestors,
+          items: [
+            ...group.items,
+            if (!group.items.any((item) => item is LottieFill) && fill != null) fill,
+            if (!group.items.any((item) => item is LottieStroke) && stroke != null) stroke,
+          ],
+        ),
+      ];
+    }
+    if (group.items.any((item) => item is LottieTrimPath)) {
+      throw const DotdartUnsupportedFeatureException('Trim paths spanning nested groups are not supported.');
+    }
+    final result = <LottieGroup>[];
+    var shapes = <LottieShape>[];
+    for (final item in group.items) {
+      if (item is LottieGroup) {
+        if (shapes.isNotEmpty) {
+          result.add(LottieGroup(name: group.name, ancestorTransforms: transforms, items: [...shapes, ?fill, ?stroke]));
+          shapes = [];
+        }
+        result.addAll(_flattenGroups(item, ancestors: transforms, inheritedFill: fill, inheritedStroke: stroke));
+      } else if (item is! LottieFill && item is! LottieStroke && item is! LottieGroupTransform) {
+        shapes.add(item);
+      }
+    }
+    if (shapes.isNotEmpty) {
+      result.add(LottieGroup(name: group.name, ancestorTransforms: transforms, items: [...shapes, ?fill, ?stroke]));
+    }
+    return result;
+  }
+
+  static void _validateAnimatedNestedPaints(
+    LottieGroup root,
+    List<LottieGroup> flattenedGroups, {
+    required String path,
+  }) {
+    if (!_requiresAnimatedNestedFlattening(root)) return;
+
+    for (final paint in _nestedPaints(root)) {
+      final occurrences = flattenedGroups.expand((group) => group.items).where((item) => identical(item, paint)).length;
+      if (occurrences == 1) continue;
+      throw DotdartUnsupportedFeatureException(
+        '$path combines animated nested-group positions with a paint stack that cannot be preserved exactly. '
+        'Move the animation to a layer transform or flatten the affected groups before exporting.',
+      );
+    }
+
+    _validateAnimatedNestedStrokeScale(root, path: path);
+  }
+
+  static void _validateTrimmedNestedPaints(
+    LottieGroup root,
+    List<LottieGroup> flattenedGroups, {
+    required String path,
+  }) {
+    if (!_containsNestedTrimPath(root)) return;
+    if (_hasExactFlattenedPaintOwnership(root, flattenedGroups) && !_requiresHierarchyForNestedStrokeScale(root)) {
+      return;
+    }
+    throw DotdartUnsupportedFeatureException(
+      '$path combines trim paths with a nested paint stack that cannot be preserved exactly. '
+      'Flatten the affected groups before exporting.',
+    );
+  }
+
+  static void _validateNestedGroupOpacity(
+    LottieGroup root,
+    List<LottieGroup> flattenedGroups, {
+    required String path,
+  }) {
+    if (!_containsPartialGroupOpacity(root)) return;
+    final requiresHierarchy =
+        !_hasExactFlattenedPaintOwnership(root, flattenedGroups) || _requiresHierarchyForNestedStrokeScale(root);
+    if (!requiresHierarchy && !_hasUnsafeNestedPartialGroupOpacity(root, flattenedGroups)) return;
+    throw DotdartUnsupportedFeatureException(
+      '$path uses partial group opacity across multiple draws or a nested paint stack that requires atomic compositing. '
+      'Flatten or precompose the affected group before exporting.',
+    );
+  }
+
+  static bool _hasExactFlattenedPaintOwnership(LottieGroup root, List<LottieGroup> flattenedGroups) {
+    for (final paint in _nestedPaints(root)) {
+      final occurrences = flattenedGroups.expand((group) => group.items).where((item) => identical(item, paint)).length;
+      if (occurrences != 1) return false;
+    }
+    return true;
+  }
+
+  static bool _containsNestedTrimPath(LottieGroup group) {
+    for (final item in group.items) {
+      if (item is LottieTrimPath) return true;
+      if (item is LottieGroup && _containsNestedTrimPath(item)) return true;
+    }
+    return false;
+  }
+
+  static bool _containsPartialGroupOpacity(LottieGroup group) {
+    for (final item in group.items) {
+      if (item is LottieGroupTransform && item.opacity != 0 && item.opacity != 100) return true;
+      if (item is LottieGroup && _containsPartialGroupOpacity(item)) return true;
+    }
+    return false;
+  }
+
+  static bool _hasUnsafeNestedPartialGroupOpacity(
+    LottieGroup group,
+    List<LottieGroup> flattenedGroups, {
+    int depth = 0,
+  }) {
+    if (depth > 0) {
+      for (final transform in group.items.whereType<LottieGroupTransform>()) {
+        if (transform.opacity == 0 || transform.opacity == 100) continue;
+        var paintOperationCount = 0;
+        for (final flattenedGroup in flattenedGroups) {
+          final containsTransform =
+              flattenedGroup.ancestorTransforms.any((item) => identical(item, transform)) ||
+              flattenedGroup.items.whereType<LottieGroupTransform>().any((item) => identical(item, transform));
+          if (!containsTransform) continue;
+          paintOperationCount += _flatGroupPaintOperationCount(flattenedGroup);
+        }
+        if (paintOperationCount > 1) return true;
+      }
+    }
+    for (final item in group.items) {
+      if (item is LottieGroup && _hasUnsafeNestedPartialGroupOpacity(item, flattenedGroups, depth: depth + 1)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static int _flatGroupPaintOperationCount(LottieGroup group) {
+    final shapes = group.items
+        .where((item) => item is LottiePath || item is LottieRect || item is LottieEllipse)
+        .toList();
+    if (shapes.isEmpty) return 0;
+    final fill = group.items.whereType<LottieFill>().lastOrNull;
+    final stroke = group.items.whereType<LottieStroke>().lastOrNull;
+    final hasFill = fill != null && fill.opacity > 0;
+    final hasStroke = stroke != null && stroke.opacity > 0;
+    if (group.items.any((item) => item is LottieTrimPath)) {
+      return (hasFill ? 1 : 0) + (hasStroke ? 1 : 0);
+    }
+    final result = hasFill ? 1 : 0;
+    if (!hasStroke) return result;
+    final compoundStroke = !hasFill && shapes.length > 1 && shapes.every((shape) => shape is LottiePath);
+    return result + (compoundStroke ? 1 : shapes.length);
+  }
+
+  static bool _requiresAnimatedNestedFlattening(LottieGroup group) {
+    for (var itemIndex = 0; itemIndex < group.items.length; itemIndex++) {
+      final item = group.items[itemIndex];
+      if (item is LottieGroup && _requiresAnimatedNestedFlattening(item)) return true;
+      if (!_isVisiblePaint(item)) continue;
+      for (var precedingIndex = 0; precedingIndex < itemIndex; precedingIndex++) {
+        final preceding = group.items[precedingIndex];
+        if (preceding is LottieGroup && _containsAnimatedGroupPosition(preceding)) return true;
+      }
+    }
+    return false;
+  }
+
+  static Iterable<LottieShape> _nestedPaints(LottieGroup group) sync* {
+    for (final item in group.items) {
+      if (_isVisiblePaint(item)) yield item;
+      if (item is LottieGroup) yield* _nestedPaints(item);
+    }
+  }
+
+  static bool _isVisiblePaint(LottieShape shape) {
+    return switch (shape) {
+      LottieFill(:final opacity) || LottieStroke(:final opacity) => opacity > 0,
+      _ => false,
+    };
+  }
+
+  static bool _containsAnimatedGroupPosition(LottieGroup group) {
+    for (final item in group.items) {
+      if (item is LottieGroupTransform &&
+          (_hasChangingScalar(item.animatedPositionX) || _hasChangingScalar(item.animatedPositionY))) {
+        return true;
+      }
+      if (item is LottieGroup && _containsAnimatedGroupPosition(item)) return true;
+    }
+    return false;
+  }
+
+  static bool _hasChangingScalar(LottieAnimatedScalar? scalar) {
+    if (scalar == null || !scalar.animated || scalar.keyframes.isEmpty) return false;
+    final initial = scalar.keyframes.first.start;
+    return scalar.keyframes.any(
+      (keyframe) => keyframe.start != initial || keyframe.end != null && keyframe.end != initial,
+    );
+  }
+
+  static void _validateAnimatedNestedStrokeScale(LottieGroup group, {required String path}) {
+    for (var itemIndex = 0; itemIndex < group.items.length; itemIndex++) {
+      final item = group.items[itemIndex];
+      if (item is LottieGroup) {
+        _validateAnimatedNestedStrokeScale(item, path: path);
+      }
+      if (item is! LottieStroke || item.opacity <= 0) continue;
+      for (var precedingIndex = 0; precedingIndex < itemIndex; precedingIndex++) {
+        final preceding = group.items[precedingIndex];
+        if (preceding is! LottieGroup || !_containsAnimatedGroupPosition(preceding)) continue;
+        if (!_containsNonIdentityGroupScale(preceding)) continue;
+        throw DotdartUnsupportedFeatureException(
+          '$path applies a parent stroke across animated, scaled nested geometry. '
+          'Move the animation to a layer transform or flatten the affected group before exporting.',
+        );
+      }
+    }
+  }
+
+  static bool _requiresHierarchyForNestedStrokeScale(LottieGroup group) {
+    for (var itemIndex = 0; itemIndex < group.items.length; itemIndex++) {
+      final item = group.items[itemIndex];
+      if (item is LottieGroup && _requiresHierarchyForNestedStrokeScale(item)) return true;
+      if (item is! LottieStroke || item.opacity <= 0) continue;
+      for (var precedingIndex = 0; precedingIndex < itemIndex; precedingIndex++) {
+        final preceding = group.items[precedingIndex];
+        if (preceding is LottieGroup && _containsNonIdentityGroupScale(preceding)) return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _containsNonIdentityGroupScale(LottieGroup group) {
+    for (final item in group.items) {
+      if (item is LottieGroupTransform && (item.scaleX != 100 || item.scaleY != 100)) return true;
+      if (item is LottieGroup && _containsNonIdentityGroupScale(item)) return true;
+    }
+    return false;
+  }
+
   static LottieShape? _parseShapeItem(
     Map<String, dynamic> raw,
     List<String> warnings, {
@@ -470,6 +789,8 @@ class LottieParser {
     if (ty == null) return null;
 
     switch (ty) {
+      case 'gr':
+        return _parseShapeGroup(raw, warnings, path: path);
       case 'sh':
         return _parsePath(raw);
       case 'rc':
@@ -483,7 +804,7 @@ class LottieParser {
       case 'tm':
         return _parseTrimPath(raw, path: path);
       case 'tr':
-        return _parseGroupTransform(raw);
+        return _parseGroupTransform(raw, path: path);
       default:
         warnings.add('Skipping unsupported shape type "$ty".');
         return null;
@@ -600,16 +921,26 @@ class LottieParser {
     );
   }
 
-  static LottieGroupTransform _parseGroupTransform(Map<String, dynamic> raw) {
+  static LottieGroupTransform _parseGroupTransform(Map<String, dynamic> raw, {required String path}) {
+    final position = raw['p'] as Map<String, dynamic>?;
+    final positionX = _parsePositionAxis(position, 0, path: '$path.p');
+    final positionY = _parsePositionAxis(position, 1, path: '$path.p');
+    for (final key in ['a', 's', 'r', 'o']) {
+      if ((raw[key] as Map<String, dynamic>?)?['a'] == 1) {
+        throw DotdartUnsupportedFeatureException('Animated group "$key" is not supported; use a layer transform.');
+      }
+    }
     return LottieGroupTransform(
-      positionX: _staticValue(raw['p'] as Map<String, dynamic>?, 0),
-      positionY: _staticValue(raw['p'] as Map<String, dynamic>?, 1),
+      positionX: positionX.animated ? 0 : positionX.staticValue,
+      animatedPositionX: positionX.animated ? positionX : null,
+      animatedPositionY: positionY.animated ? positionY : null,
+      positionY: positionY.animated ? 0 : positionY.staticValue,
       anchorX: _staticValue(raw['a'] as Map<String, dynamic>?, 0),
       anchorY: _staticValue(raw['a'] as Map<String, dynamic>?, 1),
-      scaleX: _staticValue(raw['s'] as Map<String, dynamic>?, 0),
-      scaleY: _staticValue(raw['s'] as Map<String, dynamic>?, 1),
+      scaleX: raw['s'] == null ? 100 : _staticValue(raw['s'] as Map<String, dynamic>?, 0),
+      scaleY: raw['s'] == null ? 100 : _staticValue(raw['s'] as Map<String, dynamic>?, 1),
       rotation: _staticValue(raw['r'] as Map<String, dynamic>?, 0),
-      opacity: _staticValue(raw['o'] as Map<String, dynamic>?, 0),
+      opacity: raw['o'] == null ? 100 : _staticValue(raw['o'] as Map<String, dynamic>?, 0),
     );
   }
 
@@ -673,6 +1004,19 @@ class LottieParser {
       );
     }
     return LottieAnimatedScalar(animated: true, keyframes: keyframes);
+  }
+
+  static LottieAnimatedScalar _parsePositionAxis(
+    Map<String, dynamic>? raw,
+    int index, {
+    required String path,
+  }) {
+    if (raw == null) return const LottieAnimatedScalar(animated: false, staticValue: 0);
+    if (raw['s'] == true || raw['s'] == 1) {
+      final axis = index == 0 ? 'x' : 'y';
+      return _parseAnimatedScalar(_requiredMap(raw[axis], path: '$path.$axis'));
+    }
+    return _parseAnimatedScalarFromArray(raw, index);
   }
 
   static LottieScalarKeyframe _parseScalarKeyframe(Map<String, dynamic> raw, Map<String, dynamic>? nextRaw) {

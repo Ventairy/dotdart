@@ -65,7 +65,65 @@ class GeneratedConsumerFixture {
     if (firstGeneratedSources.toString() != secondGeneratedSources.toString()) {
       throw StateError('Generated consumer fixture changed after a second build_runner run.');
     }
+    await _verifyPackageConsumer(flutter: flutter, fixtureDirectory: fixtureDirectory);
     return true;
+  }
+
+  Future<void> _verifyPackageConsumer({required String flutter, required Directory fixtureDirectory}) async {
+    final appDirectory = Directory('${packageRoot.path}/build/dotdart_package_consumer_fixture');
+    if (appDirectory.existsSync()) appDirectory.deleteSync(recursive: true);
+    appDirectory.createSync(recursive: true);
+    File('${appDirectory.path}/pubspec.yaml').writeAsStringSync('''
+name: dotdart_package_consumer_fixture
+publish_to: none
+
+environment:
+  sdk: ">=3.12.0 <4.0.0"
+
+dependencies:
+  dotdart_generated_consumer_fixture:
+    path: ../generated_consumer_fixture
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+''');
+    final testDirectory = Directory('${appDirectory.path}/test')..createSync(recursive: true);
+    File('${testDirectory.path}/package_image_test.dart').writeAsStringSync(r'''
+import 'package:dotdart_generated_consumer_fixture/gen/images.g.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('when rendering a package image, it should load from the dependency', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: $Images.landscape(width: 80, package: 'dotdart_generated_consumer_fixture')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('when caching a package image, it should remove the matching entry', (tester) async {
+    late BuildContext context;
+    await tester.pumpWidget(MaterialApp(home: Builder(builder: (value) => SizedBox(key: ValueKey(context = value)))));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => $ImagesCache.precacheLandscape(context, width: 80, package: 'dotdart_generated_consumer_fixture'),
+    );
+    await tester.pump();
+
+    expect(
+      await $ImagesCache.removeLandscape(context, width: 80, package: 'dotdart_generated_consumer_fixture'),
+      isTrue,
+    );
+  });
+}
+''');
+    await _run(executable: flutter, arguments: const ['pub', 'get'], workingDirectory: appDirectory.path);
+    await _run(executable: flutter, arguments: const ['test'], workingDirectory: appDirectory.path);
   }
 
   void _copyDirectory(Directory source, Directory destination) {
@@ -115,6 +173,9 @@ class GeneratedConsumerFixture {
   }
 
   void _writeLottieAssets(Directory fixtureDirectory) {
+    File('${packageRoot.path}/example/assets/lotties/alpha_matte.json').copySync(
+      '${fixtureDirectory.path}/assets/lotties/alpha_matte.json',
+    );
     File('${packageRoot.path}/example/assets/lotties/cataqui_job_cards_carousel.json').copySync(
       '${fixtureDirectory.path}/assets/lotties/cataqui_job_cards_carousel.json',
     );

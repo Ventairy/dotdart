@@ -21,6 +21,152 @@ void main() {
       });
     }
 
+    for (final progress in [0.0, 1.0]) {
+      testWidgets('when nested mattes animate at $progress, it should preserve the background and reveal the target', (
+        tester,
+      ) async {
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Center(
+              child: RepaintBoundary(
+                key: key,
+                child: ColoredBox(
+                  color: const Color(0xFF00FF00),
+                  child: $Lotties.alphaMatte(width: 100, progress: progress),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final pixels = await tester.runAsync(() async {
+          final image = await boundary.toImage();
+          final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+          final samples = [
+            for (final x in [10, 40, 90])
+              [for (var channel = 0; channel < 4; channel++) bytes.getUint8((50 * 100 + x) * 4 + channel)],
+          ];
+          image.dispose();
+          return samples;
+        });
+        expect(
+          pixels,
+          progress == 0
+              ? [
+                  [0, 255, 0, 255],
+                  [0, 255, 0, 255],
+                  [0, 0, 255, 255],
+                ]
+              : [
+                  [0, 0, 255, 255],
+                  [0, 255, 0, 255],
+                  [0, 0, 255, 255],
+                ],
+        );
+      });
+    }
+
+    testWidgets('when a matte is translucent, it should multiply alpha without painting its color', (tester) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: RepaintBoundary(
+              key: key,
+              child: $Lotties.alphaMatte(
+                width: 100,
+                progress: 0,
+                overrides: const AlphaMatteOverrides(maskColor: Color(0x8000FF00)),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final pixel = await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba))!;
+        final pixel = [for (var channel = 0; channel < 4; channel++) bytes.getUint8((50 * 100 + 20) * 4 + channel)];
+        image.dispose();
+        return pixel;
+      });
+      expect(pixel, [0, 0, 255, 127]);
+    });
+
+    for (final (progress, expectedAlpha) in [
+      (0.0, [255, 255, 255, 255, 255]),
+      (0.25, [255, 127, 63, 127, 255]),
+    ]) {
+      testWidgets(
+        'when an inverted matte with overlapping translucent draws renders at $progress, it should preserve union alpha',
+        (tester) async {
+          final key = GlobalKey();
+          await tester.pumpWidget(
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: Center(
+                child: RepaintBoundary(
+                  key: key,
+                  child: $Lotties.invertedMatteOverlap(width: 100, progress: progress),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+          final alpha = await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba))!;
+            final samples = [
+              for (final x in [5, 20, 50, 80, 95]) bytes.getUint8((50 * 100 + x) * 4 + 3),
+            ];
+            image.dispose();
+            return samples;
+          });
+          expect(alpha, expectedAlpha);
+        },
+      );
+    }
+
+    testWidgets('when nested translucent paints overlap, it should preserve both paints without darkening siblings', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: RepaintBoundary(
+              key: key,
+              child: $Lotties.nestedShapePaints(width: 100, progress: 0),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final samples = await tester.runAsync(() async {
+        final image = await boundary.toImage();
+        final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba))!;
+        final samples = [
+          for (final x in [25, 45])
+            [for (var channel = 0; channel < 4; channel++) bytes.getUint8((50 * 100 + x) * 4 + channel)],
+        ];
+        image.dispose();
+        return samples;
+      });
+
+      expect(samples, [
+        [inInclusiveRange(168, 172), 0, inInclusiveRange(83, 87), inInclusiveRange(190, 192)],
+        [inInclusiveRange(168, 172), 0, inInclusiveRange(83, 87), inInclusiveRange(190, 192)],
+      ]);
+    });
+
     final assets =
         <
           ({
@@ -76,41 +222,61 @@ void main() {
       }
     }
 
-    testWidgets('when an exported drop shadow renders, it should preserve fill and paint outside the outline', (tester) async {
+    testWidgets('when an exported drop shadow renders, it should preserve fill and paint outside the outline', (
+      tester,
+    ) async {
       final key = GlobalKey();
-      await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: Center(child: RepaintBoundary(key: key, child: $Icons.dropShadow(width: 84))),
-      ));
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: RepaintBoundary(key: key, child: $Icons.dropShadow(width: 84)),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final (image, bytes) = await tester.runAsync(() async {
-        final image = await boundary.toImage();
-        return (image, await image.toByteData(format: ui.ImageByteFormat.rawRgba));
-      }) ?? (throw StateError('Image capture failed'));
+      final (image, bytes) =
+          await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            return (image, await image.toByteData(format: ui.ImageByteFormat.rawRgba));
+          }) ??
+          (throw StateError('Image capture failed'));
       final pixels = bytes!.buffer.asUint8List();
       final inside = (40 * image.width + 40) * 4;
       final outside = (64 * image.width + 40) * 4;
       final far = (75 * image.width + 40) * 4;
       expect(
         [pixels.sublist(inside, inside + 4), pixels[outside + 3], pixels[far + 3]],
-        [[66, 197, 82, 255], greaterThan(0), 0],
+        [
+          [66, 197, 82, 255],
+          greaterThan(0),
+          0,
+        ],
       );
       image.dispose();
     });
 
-    testWidgets('when shadow compositing meets transparency and siblings, it should preserve knockout and bounds', (tester) async {
+    testWidgets('when shadow compositing meets transparency and siblings, it should preserve knockout and bounds', (
+      tester,
+    ) async {
       final key = GlobalKey();
-      await tester.pumpWidget(Directionality(
-        textDirection: TextDirection.ltr,
-        child: Center(child: RepaintBoundary(key: key, child: $Icons.shadowComposite(width: 42))),
-      ));
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: RepaintBoundary(key: key, child: $Icons.shadowComposite(width: 42)),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-      final (image, bytes) = await tester.runAsync(() async {
-        final image = await boundary.toImage();
-        return (image, await image.toByteData(format: ui.ImageByteFormat.rawRgba));
-      }) ?? (throw StateError('Image capture failed'));
+      final (image, bytes) =
+          await tester.runAsync(() async {
+            final image = await boundary.toImage();
+            return (image, await image.toByteData(format: ui.ImageByteFormat.rawRgba));
+          }) ??
+          (throw StateError('Image capture failed'));
       final pixels = bytes!.buffer.asUint8List();
       final samples = [2, 20, 33, 35].map((x) {
         final offset = (20 * image.width + x) * 4;
@@ -208,11 +374,18 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('when generated matrix and skew geometry renders, it should preserve fills strokes and clips', (tester) async {
+    testWidgets('when generated matrix and skew geometry renders, it should preserve fills strokes and clips', (
+      tester,
+    ) async {
       const boundaryKey = ValueKey('affine_geometry_boundary');
-      await tester.pumpWidget(Center(child: RepaintBoundary(
-        key: boundaryKey, child: $Icons.affineGeometry(width: 100),
-      )));
+      await tester.pumpWidget(
+        Center(
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: $Icons.affineGeometry(width: 100),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey));
       final captured = await tester.runAsync(() async {
@@ -224,11 +397,40 @@ void main() {
       addTearDown(image.dispose);
       final pixels = bytes!.buffer.asUint8List();
       // Interior points calculated independently from the SVG coordinates.
-      final samples = [(5, 5), (1, 1), (39, 6), (31, 6), (66, 10), (66, 2),
-        (16, 38), (5, 38), (45, 34), (45, 37), (70, 36), (62, 36),
-        (15, 64), (5, 64), (35, 65)];
-      expect(samples.map((point) => pixels[(point.$2 * image.width + point.$1) * 4 + 3]),
-        [255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 0]);
+      final samples = [
+        (5, 5),
+        (1, 1),
+        (39, 6),
+        (31, 6),
+        (66, 10),
+        (66, 2),
+        (16, 38),
+        (5, 38),
+        (45, 34),
+        (45, 37),
+        (70, 36),
+        (62, 36),
+        (15, 64),
+        (5, 64),
+        (35, 65),
+      ];
+      expect(samples.map((point) => pixels[(point.$2 * image.width + point.$1) * 4 + 3]), [
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        255,
+        0,
+        0,
+      ]);
     });
 
     testWidgets('when a generated SVG rotates a drawable, it should preserve the centered dumbbell connector', (
