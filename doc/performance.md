@@ -29,3 +29,10 @@ application does less work while rendering.
 - Removal preserves live image entries, avoiding a duplicate decode when the
   same image is still displayed during a transition.
 - Generated images use repaint boundaries to isolate expensive repaints.
+
+Generated image and GIF accessors and their cache methods accept an optional
+`imageCache`. Supply the same Flutter `ImageCache` instance when warming,
+rendering, and removing an asset to keep its decoded images separate from the
+application's shared cache. Your cache owner must set its memory budget and
+clear it when the application receives memory pressure. Omitting `imageCache`
+keeps Flutter's shared-cache behavior.

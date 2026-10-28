@@ -26,7 +26,12 @@ void main() {
       expect(params.any((p) => p.name == 'alignment'), isTrue);
       expect(params.any((p) => p.name == 'color'), isTrue);
       expect(params.any((p) => p.name == 'colorBlendMode'), isTrue);
-      expect(params, hasLength(8));
+      expect(params, hasLength(9));
+    });
+
+    test('when generating raster accessors, it should accept an isolated image cache', () {
+      final generator = ImageGenerator(fixture, 'assets/three_d/cat.webp');
+      expect(generator.params.map((parameter) => parameter.name), contains('imageCache'));
     });
 
     test('when generating the widget class name, it should derive from the source path', () {
@@ -125,10 +130,10 @@ void main() {
       expect(source, contains("static const String _assetPath = 'assets/three_d/cat.webp'"));
     });
 
-    test('when generating a package image, it should forward the package to Image.asset', () {
+    test('when generating a package image, it should forward the package to its asset provider', () {
       final source = ImageGenerator(fixture, 'assets/three_d/cat.webp').generateWidgetClass();
 
-      expect(source, allOf(contains('final String? package;'), contains('package: package,')));
+      expect(source, allOf(contains('final String? package;'), contains('AssetImage(_assetPath, package: package)')));
     });
 
     test('when generating source, it should not expose a public cache key', () {
@@ -156,7 +161,10 @@ void main() {
       final generator = ImageGenerator(fixture, 'assets/three_d/cat.webp');
       final source = generator.generateWidgetClass();
 
-      expect(source, allOf(contains('cacheWidth: (w * dpr).ceil()'), contains('cacheHeight: (h * dpr).ceil()')));
+      expect(
+        source,
+        allOf(contains('final pixelWidth = (w * dpr).ceil()'), contains('final pixelHeight = (h * dpr).ceil()')),
+      );
     });
 
     test('when generating source, it should wrap the image in a RepaintBoundary', () {

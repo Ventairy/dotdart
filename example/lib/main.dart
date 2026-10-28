@@ -25,20 +25,40 @@ class DotdartExamplePage extends StatefulWidget {
   State<DotdartExamplePage> createState() => _DotdartExamplePageState();
 }
 
-class _DotdartExamplePageState extends State<DotdartExamplePage> {
+class _DotdartExamplePageState extends State<DotdartExamplePage> with WidgetsBindingObserver {
   static const _cachedImageWidth = 96.0;
+
+  final _imageCache = ImageCache()..maximumSizeBytes = 4 * 1024 * 1024;
 
   var _showCachedImage = false;
 
   Future<void> _precacheAndShowImage() async {
-    await $ImagesCache.precacheCataqui(context, width: _cachedImageWidth);
+    await $ImagesCache.precacheCataqui(context, width: _cachedImageWidth, imageCache: _imageCache);
     if (!mounted) return;
     setState(() => _showCachedImage = true);
   }
 
   Future<void> _hideAndRemoveImage() async {
     setState(() => _showCachedImage = false);
-    await $ImagesCache.removeCataqui(context, width: _cachedImageWidth);
+    await $ImagesCache.removeCataqui(context, width: _cachedImageWidth, imageCache: _imageCache);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didHaveMemoryPressure() => _imageCache.clear();
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _imageCache
+      ..clear()
+      ..clearLiveImages();
+    super.dispose();
   }
 
   @override
@@ -122,11 +142,11 @@ class _DotdartExamplePageState extends State<DotdartExamplePage> {
           ),
           const SizedBox(height: 16),
           _ExampleCard(
-            label: 'Per-asset image cache',
+            label: 'Separate image cache',
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (_showCachedImage) $Images.cataqui(width: _cachedImageWidth),
+                if (_showCachedImage) $Images.cataqui(width: _cachedImageWidth, imageCache: _imageCache),
                 if (_showCachedImage) const SizedBox(width: 16),
                 FilledButton(
                   onPressed: _showCachedImage ? _hideAndRemoveImage : _precacheAndShowImage,

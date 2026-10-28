@@ -8,7 +8,7 @@ import 'accessor_param.dart';
 import 'naming.dart';
 
 /// Generates a self-contained Dart `StatelessWidget` from a [RasterImage]
-/// model, producing an optimized `Image.asset` widget with embedded metadata,
+/// model, producing an optimized `Image` widget with embedded metadata,
 /// decode-time downsampling, and thumbhash placeholder.
 class ImageGenerator {
   ImageGenerator(this.model, this.sourcePath);
@@ -25,6 +25,11 @@ class ImageGenerator {
     const AccessorParam(name: 'width', type: 'double?', documentation: 'Width in logical pixels.'),
     const AccessorParam(name: 'height', type: 'double?', documentation: 'Height in logical pixels.'),
     const AccessorParam(name: 'package', type: 'String?', documentation: 'Package containing the image.'),
+    const AccessorParam(
+      name: 'imageCache',
+      type: 'ImageCache?',
+      documentation: 'The decoded-image cache, or Flutter’s shared cache when omitted.',
+    ),
     const AccessorParam(name: 'fit', type: 'BoxFit?', documentation: 'How to inscribe the image in its bounds.'),
     const AccessorParam(
       name: 'alignment',
@@ -113,9 +118,14 @@ class ImageGenerator {
     b.writeln('    final w = width ?? (height != null ? height! * aspect : $defaultWidth.0);');
     b.writeln('    final h = height ?? w / aspect;');
     b.writeln();
-    b.writeln('    final image = Image.asset(');
-    b.writeln('      _assetPath,');
-    b.writeln('      package: package,');
+    b.writeln('    final asset = AssetImage(_assetPath, package: package);');
+    b.writeln('    final pixelWidth = (w * dpr).ceil();');
+    b.writeln('    final pixelHeight = (h * dpr).ceil();');
+    b.writeln('    final provider = imageCache == null');
+    b.writeln('        ? ResizeImage.resizeIfNeeded(pixelWidth, pixelHeight, asset)');
+    b.writeln('        : _DotdartCachedImage(asset, width: pixelWidth, height: pixelHeight, cache: imageCache!);');
+    b.writeln('    final image = Image(');
+    b.writeln('      image: provider,');
     b.writeln('      key: key,');
     b.writeln('      width: w,');
     b.writeln('      height: h,');
@@ -125,8 +135,6 @@ class ImageGenerator {
     b.writeln('      colorBlendMode: colorBlendMode,');
     b.writeln('      gaplessPlayback: true,');
     b.writeln('      filterQuality: FilterQuality.low,');
-    b.writeln('      cacheWidth: (w * dpr).ceil(),');
-    b.writeln('      cacheHeight: (h * dpr).ceil(),');
     b.writeln('      frameBuilder: _frameBuilder,');
     b.writeln('    );');
     b.writeln();

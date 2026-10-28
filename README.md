@@ -143,6 +143,20 @@ final removed = await $ImagesCache.removeProfile(context, width: 160, package: '
 The package must declare the images or GIFs under `flutter: assets:`. Omit
 `package` for assets generated in the app itself.
 
+To keep decoded images separate from Flutter's shared cache, pass the same
+`ImageCache` to rendering, precaching, and removal:
+
+```dart
+final imageCache = ImageCache()..maximumSizeBytes = 4 * 1024 * 1024;
+await $ImagesCache.precacheProfile(context, width: 160, imageCache: imageCache);
+final image = $Images.profile(width: 160, imageCache: imageCache);
+final removed = await $ImagesCache.removeProfile(context, width: 160, imageCache: imageCache);
+```
+
+Keep that cache with its owner, clear it on memory pressure, and release it when
+the owner is disposed. Omit `imageCache` to use Flutter's shared cache.
+Precaching also accepts `onError` to handle a failed load and allow a later retry.
+
 Look up an asset using its original filename when the name is known at runtime:
 
 ```dart
@@ -155,7 +169,7 @@ within that namespace. Unknown names and directory paths return `null`.
 It accepts `key`, `width`, and `height`, preserving the selected asset's
 existing sizing rules and defaults. Use the named accessor for asset-specific
 options such as colors, animation progress, or image fitting.
-For image and GIF namespaces, `findByName` also accepts `package`.
+For image and GIF namespaces, `findByName` also accepts `package` and `imageCache`.
 
 Supported Lottie text and colors become fields on the generated `overrides`
 object.

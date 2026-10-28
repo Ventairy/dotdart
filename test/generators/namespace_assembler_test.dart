@@ -121,6 +121,13 @@ void main() {
   );
 
   group('NamespaceAssembler', () {
+    for (final asset in [crossAsset, lottieAsset]) {
+      test('when lookup contains only ${asset.assetType.name}, it should omit image-cache options', () {
+        final source = NamespaceAssembler(namespaceName: 'Assets', folderSegment: 'assets', assets: [asset]).assemble();
+        expect(source, isNot(contains('ImageCache? imageCache')));
+      });
+    }
+
     test('when assembling lookup, it should document matching and sizing behavior', () {
       final code = NamespaceAssembler(namespaceName: 'Icons', folderSegment: 'icons', assets: [crossAsset]).assemble();
 
@@ -391,7 +398,7 @@ void main() {
           contains("static const _landscapeAssetPath = 'assets/images/landscape.png'"),
           contains('aspectRatio: 2,'),
           contains('final key = await provider.obtainKey(configuration);'),
-          contains('imageCache.evict(key, includeLive: false)'),
+          contains('(imageCache ?? PaintingBinding.instance.imageCache).evict('),
         ]),
       );
     });
