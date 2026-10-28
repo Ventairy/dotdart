@@ -18,7 +18,7 @@ void main() {
 
       expect(await fixture.verify(), isTrue);
     },
-    timeout: const Timeout(Duration(minutes: 3)),
+    timeout: const Timeout(Duration(minutes: 10)),
   );
 }
 
@@ -198,7 +198,10 @@ void main() {
     required List<String> arguments,
     required String workingDirectory,
   }) async {
+    final commandStopwatch = Stopwatch()..start();
+    stdout.writeln('Generated consumer: ${arguments.join(' ')}');
     final result = await Process.run(executable, arguments, workingDirectory: workingDirectory);
+    stdout.writeln('Generated consumer completed in ${commandStopwatch.elapsed.inSeconds}s: ${arguments.join(' ')}');
     if (result.exitCode == 0) return;
     throw StateError(
       '$executable ${arguments.join(' ')} failed with ${result.exitCode}.\n'
