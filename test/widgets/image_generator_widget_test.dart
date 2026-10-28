@@ -37,11 +37,11 @@ void main() {
       expect(source, contains('MediaQuery.devicePixelRatioOf'));
     });
 
-    testWidgets('when evaluating the build method, it should reference Image.asset', (tester) async {
+    testWidgets('when evaluating the build method, it should create an Image with its sized provider', (tester) async {
       final generator = ImageGenerator(fixture, 'test_asset.png');
       final source = generator.generateWidgetClass();
 
-      expect(source, contains('Image.asset('));
+      expect(source, contains('final image = Image('));
     });
 
     testWidgets('when the widget has no explicit width, it should default to 280 logical pixels', (tester) async {
@@ -51,7 +51,7 @@ void main() {
       expect(source, contains('280.0'));
     });
 
-    testWidgets('when a color is provided, it should pass color to Image.asset', (tester) async {
+    testWidgets('when a color is provided, it should pass color to the generated Image', (tester) async {
       final generator = ImageGenerator(fixture, 'test_asset.png');
       final source = generator.generateWidgetClass();
 

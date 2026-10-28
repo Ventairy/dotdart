@@ -64,7 +64,7 @@ class NamespaceAssembler {
 
   void _writeImports(StringBuffer b) {
     final types = assets.map((asset) => asset.assetType).toSet();
-    if (types.contains(DotdartAssetType.lottie)) {
+    if (types.contains(DotdartAssetType.lottie) || types.contains(DotdartAssetType.raster)) {
       b.writeln("import 'dart:async';");
     }
     if (types.contains(DotdartAssetType.svg) || types.contains(DotdartAssetType.lottie)) {
@@ -103,6 +103,7 @@ class NamespaceAssembler {
     }
     if (types.contains(DotdartAssetType.raster)) {
       b.write(SharedEmitter.thumbhashCode());
+      b.write(SharedEmitter.cachedImageProvider());
     }
   }
 
@@ -142,16 +143,22 @@ class NamespaceAssembler {
     b.writeln('  /// All asset-specific options keep their defaults.');
     if (hasImages) {
       b.writeln('  /// [package] identifies the package containing an image or GIF.');
+      b.writeln('  /// [imageCache] selects the same optional cache used by the named accessor.');
     }
     b.writeln('  static Widget? findByName(');
     b.writeln('    String fileName, {');
     b.writeln('    Key? key,');
     b.writeln('    double? width,');
     b.writeln('    double? height,');
-    if (hasImages) b.writeln('    String? package,');
+    if (hasImages) {
+      b.writeln('    String? package,');
+      b.writeln('    ImageCache? imageCache,');
+    }
     b.writeln('  }) => switch (fileName) {');
     for (final asset in assets) {
-      final packageArgument = asset.assetType == DotdartAssetType.raster ? ', package: package' : '';
+      final packageArgument = asset.assetType == DotdartAssetType.raster
+          ? ', package: package, imageCache: imageCache'
+          : '';
       b.writeln(
         '    ${_fileNameLiteral(asset.sourcePath)} => '
         '${asset.accessorName}(key: key, width: width, height: height$packageArgument),',
@@ -224,12 +231,16 @@ class NamespaceAssembler {
     b.writeln('  /// [width] and [height] are logical pixels. Pass the same values to');
     b.writeln('  /// `$_className.${asset.accessorName}` so it reuses this cache entry.');
     b.writeln('  /// Pass the same [package] as the image widget for package assets.');
+    b.writeln('  /// [imageCache] selects the same optional cache used when rendering.');
+    b.writeln('  /// [onError] receives failures without preventing a later load.');
     b.writeln("  /// Omitting both values uses the widget's default display size.");
     b.writeln('  static Future<void> precache$methodSuffix(');
     b.writeln('    BuildContext context, {');
     b.writeln('    double? width,');
     b.writeln('    double? height,');
     b.writeln('    String? package,');
+    b.writeln('    ImageCache? imageCache,');
+    b.writeln('    ImageErrorListener? onError,');
     b.writeln('  }) =>');
     b.writeln('      precacheImage(');
     b.writeln('        _provider(');
@@ -238,15 +249,17 @@ class NamespaceAssembler {
     b.writeln('          aspectRatio: $aspectRatio,');
     b.writeln('          width: width,');
     b.writeln('          height: height,');
+    b.writeln('          cache: imageCache,');
     b.writeln('        ),');
     b.writeln('        context,');
+    b.writeln('        onError: onError,');
     b.writeln('      );');
     b.writeln();
     b.writeln("  /// Removes the decoded `${asset.accessorName}` entry from Flutter's image cache.");
     b.writeln('  ///');
     b.writeln('  /// Returns whether the matching entry existed. [width] and [height]');
     b.writeln('  /// must match the values used to precache or render the image.');
-    b.writeln('  /// [package] must match the image widget and precache call.');
+    b.writeln('  /// [package] and [imageCache] must match the image widget and precache call.');
     b.writeln('  /// An image that is still displayed remains live until its last listener');
     b.writeln('  /// is removed, preventing a duplicate decode during transitions.');
     b.writeln('  static Future<bool> remove$methodSuffix(');
@@ -254,6 +267,7 @@ class NamespaceAssembler {
     b.writeln('    double? width,');
     b.writeln('    double? height,');
     b.writeln('    String? package,');
+    b.writeln('    ImageCache? imageCache,');
     b.writeln('  }) async {');
     b.writeln('    final configuration = createLocalImageConfiguration(context);');
     b.writeln('    final provider = _provider(');
@@ -262,9 +276,10 @@ class NamespaceAssembler {
     b.writeln('      aspectRatio: $aspectRatio,');
     b.writeln('      width: width,');
     b.writeln('      height: height,');
+    b.writeln('      cache: imageCache,');
     b.writeln('    );');
     b.writeln('    final key = await provider.obtainKey(configuration);');
-    b.writeln('    return imageCache.evict(key, includeLive: false);');
+    b.writeln('    return (imageCache ?? PaintingBinding.instance.imageCache).evict(key, includeLive: false);');
     b.writeln('  }');
     b.writeln();
   }
@@ -276,6 +291,7 @@ class NamespaceAssembler {
     b.writeln('    required double aspectRatio,');
     b.writeln('    double? width,');
     b.writeln('    double? height,');
+    b.writeln('    ImageCache? cache,');
     b.writeln('  }) {');
     b.writeln("    assert(width == null || width > 0, 'width must be greater than zero.');");
     b.writeln("    assert(height == null || height > 0, 'height must be greater than zero.');");
@@ -285,6 +301,11 @@ class NamespaceAssembler {
     );
     b.writeln('    final resolvedHeight = height ?? resolvedWidth / aspectRatio;');
     b.writeln('    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);');
+    b.writeln('    if (cache != null) {');
+    b.writeln(
+      '      return _DotdartCachedImage(asset, width: (resolvedWidth * devicePixelRatio).ceil(), height: (resolvedHeight * devicePixelRatio).ceil(), cache: cache);',
+    );
+    b.writeln('    }');
     b.writeln('    return ResizeImage.resizeIfNeeded(');
     b.writeln('      (resolvedWidth * devicePixelRatio).ceil(),');
     b.writeln('      (resolvedHeight * devicePixelRatio).ceil(),');

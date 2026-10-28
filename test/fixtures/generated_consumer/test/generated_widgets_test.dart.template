@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dotdart_generated_consumer_fixture/gen/icons.g.dart';
@@ -5,6 +6,7 @@ import 'package:dotdart_generated_consumer_fixture/gen/images.g.dart';
 import 'package:dotdart_generated_consumer_fixture/gen/lotties.g.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -580,6 +582,54 @@ void main() {
       expect((removed, status.live, status.keepAlive), equals((true, true, false)));
     });
 
+    testWidgets('when an isolated preload fails, it should report the failure and allow the same asset to retry', (tester) async {
+      final isolated = ImageCache();
+      addTearDown(() { isolated.clear(); isolated.clearLiveImages(); });
+      final bundle = _RetryingAssetBundle();
+      late BuildContext context;
+      await tester.pumpWidget(DefaultAssetBundle(bundle: bundle, child: MaterialApp(home: Builder(builder: (value) {
+        context = value;
+        return const SizedBox.shrink();
+      }))));
+      var errors = 0;
+      await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated,
+        onError: (_, _) { errors++; }));
+      await tester.pump();
+      final afterFailure = (isolated.currentSize, isolated.pendingImageCount);
+      await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated));
+      await tester.pump();
+      expect((errors, afterFailure, isolated.currentSize, isolated.pendingImageCount), (1, (0, 0), 1, 0));
+    });
+
+    for (final useLookup in [false, true]) {
+    testWidgets('when using an isolated image cache with ${useLookup ? 'filename lookup' : 'a named accessor'}, it should survive global eviction and reuse the same decode', (tester) async {
+      final isolated = ImageCache();
+      addTearDown(() { isolated.clear(); isolated.clearLiveImages(); });
+      late BuildContext context;
+      await tester.pumpWidget(MaterialApp(home: Builder(builder: (value) {
+        context = value;
+        return const SizedBox.shrink();
+      })));
+      await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated));
+      await tester.pump();
+      imageCache.clear();
+      await tester.pumpWidget(MaterialApp(home: useLookup
+        ? $Images.findByName('landscape.png', width: 80, imageCache: isolated)
+        : $Images.landscape(width: 80, imageCache: isolated)));
+      await tester.pumpAndSettle();
+      final element = tester.element(find.byType(Image));
+      final provider = tester.widget<Image>(find.byType(Image)).image;
+      final status = await provider.obtainCacheStatus(configuration: createLocalImageConfiguration(element));
+      var synchronous = false;
+      final listener = ImageStreamListener((image, sync) { synchronous = sync; image.dispose(); });
+      provider.resolve(createLocalImageConfiguration(element))..addListener(listener)..removeListener(listener);
+      final before = (isolated.currentSize, imageCache.currentSize, status?.keepAlive, synchronous);
+      final removed = await $ImagesCache.removeLandscape(element, width: 80, imageCache: isolated);
+      expect((before, removed, isolated.currentSize), ((1, 0, true, true), true, 0));
+    });
+
+    }
+
     testWidgets('when precaching an image by width, it should remove the derived-size entry', (tester) async {
       late BuildContext context;
       await tester.pumpWidget(
@@ -624,4 +674,17 @@ void main() {
       expect((removedDifferentSize, removedMatchingSize), equals((false, true)));
     });
   });
+}
+
+class _RetryingAssetBundle extends CachingAssetBundle {
+  bool _failed = false;
+
+  @override
+  Future<ByteData> load(String key) async {
+    if (!_failed && key.endsWith('/landscape.png')) {
+      _failed = true;
+      throw StateError('Transient fixture asset failure');
+    }
+    return rootBundle.load(key);
+  }
 }

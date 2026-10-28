@@ -7,6 +7,73 @@
 class SharedEmitter {
   SharedEmitter._();
 
+  /// The raster provider that routes decoded images to a caller-owned cache.
+  static String cachedImageProvider() => '''
+class _DotdartCachedImage extends ResizeImage {
+  const _DotdartCachedImage(
+    super.image, {
+    required int width,
+    required int height,
+    required this.cache,
+  }) : super(width: width, height: height);
+
+  final ImageCache cache;
+
+  @override
+  void resolveStreamForKey(ImageConfiguration configuration, ImageStream stream,
+      ResizeImageKey key, ImageErrorListener handleError) {
+    final completer = cache.putIfAbsent(
+      key,
+      () {
+        if (stream.completer != null) return stream.completer!;
+        final completer = loadImage(key, PaintingBinding.instance.instantiateImageCodecWithSize);
+        // AssetImage evicts Flutter's global cache on failure. This provider
+        // must also release a failed request from the caller-owned pool.
+        late ImageStreamListener listener;
+        listener = ImageStreamListener((image, _) {
+          image.dispose();
+          completer.removeListener(listener);
+        }, onError: (_, _) {
+          scheduleMicrotask(() => cache.evict(key));
+          completer.removeListener(listener);
+        });
+        completer.addListener(listener);
+        return completer;
+      },
+      onError: handleError,
+    );
+    if (completer != null && stream.completer == null) {
+      stream.setCompleter(completer);
+    }
+  }
+
+  @override
+  Future<ImageCacheStatus?> obtainCacheStatus({required ImageConfiguration configuration, ImageErrorListener? handleError}) async {
+    try {
+      return cache.statusForKey(await obtainKey(configuration));
+    } on Object catch (error, stack) {
+      if (handleError != null) {
+        handleError(error, stack);
+      } else {
+        FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack, library: 'dotdart'));
+      }
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> evict({ImageCache? cache, ImageConfiguration configuration = ImageConfiguration.empty}) async =>
+      (cache ?? this.cache).evict(await obtainKey(configuration));
+
+  @override
+  bool operator ==(Object other) => other is _DotdartCachedImage && identical(cache, other.cache) && super == other;
+
+  @override
+  int get hashCode => Object.hash(super.hashCode, identityHashCode(cache));
+}
+
+''';
+
   /// The file-level color-opacity helper used by every painter.
   ///
   /// Replaces the per-painter `_applyOpacity` static method that was

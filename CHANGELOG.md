@@ -1,3 +1,9 @@
+## 0.11.4
+
+- Added optional caller-owned image caches to generated image and GIF widgets and
+  their preparation/removal methods, preserving display-size decoding.
+- Added preparation error callbacks so failed assets can be retried later.
+
 ## 0.11.3
 
 - Generated image and GIF widgets and cache methods now accept `package` so

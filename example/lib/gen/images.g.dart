@@ -7,6 +7,7 @@
 // Generated canvas and paint sequences intentionally use repeated receiver calls.
 // ignore_for_file: cascade_invocations, unused_element, unused_element_parameter
 
+import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 /// Paints a thumbhash placeholder on a [CustomPainter] canvas.
@@ -79,6 +80,89 @@ ImageFrameBuilder _dotdartImageFrameBuilder(
   };
 }
 
+class _DotdartCachedImage extends ResizeImage {
+  const _DotdartCachedImage(
+    super.image, {
+    required int width,
+    required int height,
+    required this.cache,
+  }) : super(width: width, height: height);
+
+  final ImageCache cache;
+
+  @override
+  void resolveStreamForKey(
+    ImageConfiguration configuration,
+    ImageStream stream,
+    ResizeImageKey key,
+    ImageErrorListener handleError,
+  ) {
+    final completer = cache.putIfAbsent(key, () {
+      if (stream.completer != null) return stream.completer!;
+      final completer = loadImage(
+        key,
+        PaintingBinding.instance.instantiateImageCodecWithSize,
+      );
+      // AssetImage evicts Flutter's global cache on failure. This provider
+      // must also release a failed request from the caller-owned pool.
+      late ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (image, _) {
+          image.dispose();
+          completer.removeListener(listener);
+        },
+        onError: (_, _) {
+          scheduleMicrotask(() => cache.evict(key));
+          completer.removeListener(listener);
+        },
+      );
+      completer.addListener(listener);
+      return completer;
+    }, onError: handleError);
+    if (completer != null && stream.completer == null) {
+      stream.setCompleter(completer);
+    }
+  }
+
+  @override
+  Future<ImageCacheStatus?> obtainCacheStatus({
+    required ImageConfiguration configuration,
+    ImageErrorListener? handleError,
+  }) async {
+    try {
+      return cache.statusForKey(await obtainKey(configuration));
+    } on Object catch (error, stack) {
+      if (handleError != null) {
+        handleError(error, stack);
+      } else {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            library: 'dotdart',
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> evict({
+    ImageCache? cache,
+    ImageConfiguration configuration = ImageConfiguration.empty,
+  }) async => (cache ?? this.cache).evict(await obtainKey(configuration));
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DotdartCachedImage &&
+      identical(cache, other.cache) &&
+      super == other;
+
+  @override
+  int get hashCode => Object.hash(super.hashCode, identityHashCode(cache));
+}
+
 /// Namespace for dotdart-generated widgets from `images/`.
 ///
 /// Call a method named after each asset to render it:
@@ -96,6 +180,7 @@ abstract final class $Images {
     double? width,
     double? height,
     String? package,
+    ImageCache? imageCache,
     BoxFit? fit,
     AlignmentGeometry alignment = Alignment.center,
     Color? color,
@@ -105,6 +190,7 @@ abstract final class $Images {
     width: width,
     height: height,
     package: package,
+    imageCache: imageCache,
     fit: fit,
     alignment: alignment,
     color: color,
@@ -119,18 +205,21 @@ abstract final class $Images {
   /// logical pixels and use the same sizing rules as the named accessor.
   /// All asset-specific options keep their defaults.
   /// [package] identifies the package containing an image or GIF.
+  /// [imageCache] selects the same optional cache used by the named accessor.
   static Widget? findByName(
     String fileName, {
     Key? key,
     double? width,
     double? height,
     String? package,
+    ImageCache? imageCache,
   }) => switch (fileName) {
     'cataqui.png' => cataqui(
       key: key,
       width: width,
       height: height,
       package: package,
+      imageCache: imageCache,
     ),
     _ => null,
   };
@@ -150,12 +239,16 @@ abstract final class $ImagesCache {
   /// [width] and [height] are logical pixels. Pass the same values to
   /// `$Images.cataqui` so it reuses this cache entry.
   /// Pass the same [package] as the image widget for package assets.
+  /// [imageCache] selects the same optional cache used when rendering.
+  /// [onError] receives failures without preventing a later load.
   /// Omitting both values uses the widget's default display size.
   static Future<void> precacheCataqui(
     BuildContext context, {
     double? width,
     double? height,
     String? package,
+    ImageCache? imageCache,
+    ImageErrorListener? onError,
   }) => precacheImage(
     _provider(
       context,
@@ -163,15 +256,17 @@ abstract final class $ImagesCache {
       aspectRatio: 1,
       width: width,
       height: height,
+      cache: imageCache,
     ),
     context,
+    onError: onError,
   );
 
   /// Removes the decoded `cataqui` entry from Flutter's image cache.
   ///
   /// Returns whether the matching entry existed. [width] and [height]
   /// must match the values used to precache or render the image.
-  /// [package] must match the image widget and precache call.
+  /// [package] and [imageCache] must match the image widget and precache call.
   /// An image that is still displayed remains live until its last listener
   /// is removed, preventing a duplicate decode during transitions.
   static Future<bool> removeCataqui(
@@ -179,6 +274,7 @@ abstract final class $ImagesCache {
     double? width,
     double? height,
     String? package,
+    ImageCache? imageCache,
   }) async {
     final configuration = createLocalImageConfiguration(context);
     final provider = _provider(
@@ -187,9 +283,13 @@ abstract final class $ImagesCache {
       aspectRatio: 1,
       width: width,
       height: height,
+      cache: imageCache,
     );
     final key = await provider.obtainKey(configuration);
-    return imageCache.evict(key, includeLive: false);
+    return (imageCache ?? PaintingBinding.instance.imageCache).evict(
+      key,
+      includeLive: false,
+    );
   }
 
   static ImageProvider<Object> _provider(
@@ -198,6 +298,7 @@ abstract final class $ImagesCache {
     required double aspectRatio,
     double? width,
     double? height,
+    ImageCache? cache,
   }) {
     assert(width == null || width > 0, 'width must be greater than zero.');
     assert(height == null || height > 0, 'height must be greater than zero.');
@@ -205,6 +306,14 @@ abstract final class $ImagesCache {
         width ?? (height != null ? height * aspectRatio : 280);
     final resolvedHeight = height ?? resolvedWidth / aspectRatio;
     final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
+    if (cache != null) {
+      return _DotdartCachedImage(
+        asset,
+        width: (resolvedWidth * devicePixelRatio).ceil(),
+        height: (resolvedHeight * devicePixelRatio).ceil(),
+        cache: cache,
+      );
+    }
     return ResizeImage.resizeIfNeeded(
       (resolvedWidth * devicePixelRatio).ceil(),
       (resolvedHeight * devicePixelRatio).ceil(),
@@ -224,6 +333,7 @@ class _Cataqui extends StatelessWidget {
     this.width,
     this.height,
     this.package,
+    this.imageCache,
     this.fit,
     this.alignment = Alignment.center,
     this.color,
@@ -238,6 +348,9 @@ class _Cataqui extends StatelessWidget {
 
   /// Package containing the image.
   final String? package;
+
+  /// The decoded-image cache, or Flutter’s shared cache when omitted.
+  final ImageCache? imageCache;
 
   /// How to inscribe the image in its bounds.
   final BoxFit? fit;
@@ -336,9 +449,19 @@ class _Cataqui extends StatelessWidget {
     final w = width ?? (height != null ? height! * aspect : 280.0);
     final h = height ?? w / aspect;
 
-    final image = Image.asset(
-      _assetPath,
-      package: package,
+    final asset = AssetImage(_assetPath, package: package);
+    final pixelWidth = (w * dpr).ceil();
+    final pixelHeight = (h * dpr).ceil();
+    final provider = imageCache == null
+        ? ResizeImage.resizeIfNeeded(pixelWidth, pixelHeight, asset)
+        : _DotdartCachedImage(
+            asset,
+            width: pixelWidth,
+            height: pixelHeight,
+            cache: imageCache!,
+          );
+    final image = Image(
+      image: provider,
       key: key,
       width: w,
       height: h,
@@ -348,8 +471,6 @@ class _Cataqui extends StatelessWidget {
       colorBlendMode: colorBlendMode,
       gaplessPlayback: true,
       filterQuality: FilterQuality.low,
-      cacheWidth: (w * dpr).ceil(),
-      cacheHeight: (h * dpr).ceil(),
       frameBuilder: _frameBuilder,
     );
 
