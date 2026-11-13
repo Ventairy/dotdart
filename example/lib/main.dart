@@ -89,6 +89,9 @@ class _DotdartExamplePageState extends State<DotdartExamplePage> with WidgetsBin
           ),
           const SizedBox(height: 16),
           _ExampleCard(label: 'SVG exported drop shadow', child: $Icons.dropShadow(width: 84)),
+          _ExampleCard(label: 'SVG linear gradient', child: $Icons.gradientPaints(width: 84)),
+          _ExampleCard(label: 'SVG embedded PNG pattern', child: $Icons.imagePatterns(width: 84)),
+          _ExampleCard(label: 'SVG arc mask compiled as clipping', child: $Icons.maskedArc(width: 84)),
           const SizedBox(height: 16),
           _ExampleCard(
             label: 'SVG by filename',

@@ -173,6 +173,27 @@ class SvgQuadTo extends SvgPathCommand {
   final double y;
 }
 
+/// An absolute elliptical arc, compiled into a cached Flutter path.
+class SvgArcTo extends SvgPathCommand {
+  const SvgArcTo({
+    required this.rx,
+    required this.ry,
+    required this.rotation,
+    required this.largeArc,
+    required this.clockwise,
+    required this.x,
+    required this.y,
+  });
+
+  final double rx;
+  final double ry;
+  final double rotation;
+  final bool largeArc;
+  final bool clockwise;
+  final double x;
+  final double y;
+}
+
 /// Close path (`Z` or `z`).
 class SvgClosePath extends SvgPathCommand {
   const SvgClosePath();

@@ -147,9 +147,9 @@ void main() {
     final pubspec = template.readAsStringSync().replaceAll('DOTDART_PACKAGE_PATH', packageRoot.absolute.path);
     File('${fixtureDirectory.path}/pubspec.yaml').writeAsStringSync(pubspec);
     template.deleteSync();
-    File(
-      '${fixtureDirectory.path}/test/generated_widgets_test.dart.template',
-    ).renameSync('${fixtureDirectory.path}/test/generated_widgets_test.dart');
+    for (final test in Directory('${fixtureDirectory.path}/test').listSync().whereType<File>()) {
+      if (test.path.endsWith('.dart.template')) test.renameSync(test.path.replaceFirst(RegExp(r'\.template$'), ''));
+    }
   }
 
   void _writeRasterAssets(Directory fixtureDirectory) {

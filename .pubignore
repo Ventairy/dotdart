@@ -13,3 +13,4 @@ doc/api/
 pubspec_overrides.yaml
 skills-lock.json
 tmp/
+tool/svg_performance/

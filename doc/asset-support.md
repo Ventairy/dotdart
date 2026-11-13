@@ -15,15 +15,24 @@ Supported:
   transforms on groups, drawable shapes, and shapes inside clip paths
 - `viewBox` offsets
 - `defs`, `clipPath`, and `clip-path="url(#id)"`
+- linear gradient fills with `gradientUnits="userSpaceOnUse"`, numeric
+  coordinates, and the default `spreadMethod="pad"`
+- elliptical arc path commands (`A` and `a`)
+- embedded PNG image patterns with matching `patternUnits` and
+  `patternContentUnits`; a pattern can contain one image or a local `use`
+  reference to an image, with positive scale and translation
+- masks containing one fully opaque white path in user coordinates
 - some exported drop shadows (see below)
 - an optional UTF-8 byte order mark and standard leading XML declaration
 
 Not supported:
 
-- gradients, arbitrary filters, masks, patterns, text, or embedded images
+- radial gradients, gradients in bounding-box coordinates, transformed
+  gradients, gradient or pattern strokes, arbitrary filters, or text
+- general masks, vector patterns, external images, or directly drawn images
+- gradients, patterns, or masks combined with drop shadows
 - CSS `style` blocks
-- `use` and `symbol`
-- arc path commands
+- `use` outside supported image patterns, and `symbol`
 - CSS transforms and transforms on the root `svg` element
 
 Matrix and skew calculations happen at build time. Generated painters reuse
@@ -45,6 +54,35 @@ SVG IDs must be non-empty, contain no whitespace, be valid standalone XML IDs,
 and be unique across the document. If different valid IDs sanitize to the same
 Dart name, the later parameter receives a deterministic numeric suffix. The
 generated Dartdoc records the original SVG ID.
+
+### SVG gradients and embedded PNG patterns
+
+Linear gradients and arcs become cached Flutter drawing data. Gradient stop
+colors keep their source values; only solid fills and strokes expose widget
+color parameters.
+
+For image patterns, use an embedded base64 PNG and `preserveAspectRatio="none"`
+on the image. Both coordinate systems must match: `userSpaceOnUse` for numeric
+SVG coordinates, or `objectBoundingBox` for fractions of the filled shape's
+bounds. The latter requires both unit attributes unless their SVG defaults
+already match. Paths used with `objectBoundingBox` patterns support cubic and
+quadratic curves; use `userSpaceOnUse` for paths with `A`/`a` arc commands.
+Pattern transforms, nested references, and animated PNGs are
+not supported. Embedded PNGs are limited to 16 megapixels.
+
+PNG bytes are included in the generated Dart library. Flutter decodes them only
+when the widget is displayed, sized for its dimensions and device pixel ratio,
+and shares decoded entries through its image cache. Multiple patterns load
+sequentially. While resizing, the current PNG stays visible until its replacement
+is ready, and obsolete pending sizes are skipped. A single pattern is limited
+to 4096 visible tiles.
+
+A supported mask uses `maskUnits="userSpaceOnUse"`, explicit positive dimensions,
+and one opaque white path. The masked content must be one filled shape without
+a stroke, optionally inside groups. White mask areas reveal that shape; areas
+outside the path or mask region stay transparent. Partial transparency,
+colored mask paths, multiple shapes, and CSS mask styling other than
+`mask-type:luminance` are not supported.
 
 ### SVG drop shadows
 

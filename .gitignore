@@ -21,3 +21,7 @@ pubspec_overrides.yaml
 .idea/
 *.iml
 .vscode/settings.json
+
+# Local SVG inputs and device benchmark artifacts
+/tmp/
+/tool/svg_performance/

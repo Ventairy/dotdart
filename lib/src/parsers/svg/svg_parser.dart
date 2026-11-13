@@ -1,9 +1,17 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
+
 import '../../models/svg_document.dart';
 import '../../models/svg_drop_shadow.dart';
 import '../../models/svg_element.dart';
+import '../../models/svg_image_pattern.dart';
+import '../../models/svg_linear_gradient.dart';
 import '../../models/svg_style.dart';
 import '../lottie_parser.dart' show DotdartUnsupportedFeatureException;
 import 'svg_drop_shadow_parser.dart';
+import 'svg_geometry_bounds.dart';
 import 'svg_mini_xml.dart';
 import 'svg_path_data.dart' show SvgPathData;
 import 'svg_transform.dart' show SvgTransform;
@@ -31,13 +39,19 @@ class SvgParseResult {
 /// Parses SVG XML into a [SvgDocument] model.
 ///
 /// Throws [DotdartUnsupportedFeatureException] for unsupported SVG features
-/// (gradients, text, unsupported filters, etc.) and [DotdartInvalidSvgException] for
+/// (text, unsupported filters, etc.) and [DotdartInvalidSvgException] for
 /// malformed SVG files.
 class SvgParser {
   SvgParser._();
   final List<String> _warnings = [];
   final Map<String, SvgClipPath> _clipPaths = {};
   final Map<String, SvgDropShadow> _dropShadows = {};
+  final Map<String, XElement> _definitions = {};
+  final Set<XElement> _imageDefinitions = {};
+  late final SvgViewBox _viewBox;
+  final Map<String, SvgLinearGradient> _gradients = {};
+  final Map<String, SvgImagePattern> _patterns = {};
+  final Map<String, (double, double, double, double)> _maskRegions = {};
 
   static SvgParseResult parse(String svgXml) {
     final parser = SvgParser._();
@@ -56,8 +70,9 @@ class SvgParser {
       throw const DotdartInvalidSvgException('Root element must be <svg>.');
     }
     _validateIds(root);
+    _collectDefinitions(root);
 
-    final viewBox = _parseViewBox(root);
+    final viewBox = _viewBox = _parseViewBox(root);
     final width = _parseLength(root.attrs['width']);
     final height = _parseLength(root.attrs['height']);
 
@@ -65,13 +80,21 @@ class SvgParser {
       throw const DotdartUnsupportedFeatureException('Filters on the root SVG are not supported.');
     }
     final rootStyle = _resolveStyle(root, _defaultStyle);
+    if (rootStyle.maskId != null) {
+      throw const DotdartUnsupportedFeatureException('Masks on the root SVG are not supported.');
+    }
     final children = _parseChildren(root, rootStyle);
     _validateClipPathRefs(children);
+    _validatePaintFilters(children);
     _validateFilters(children, insideFilter: rootStyle.opacity != 1 || rootStyle.clipPathId != null);
     for (final clip in _clipPaths.values) {
       _validateFilters(clip.children, insideFilter: true);
     }
 
+    final usedPaints = <String>{};
+    _collectUsedPaints(children, usedPaints);
+    _gradients.removeWhere((id, _) => !usedPaints.contains(id));
+    _patterns.removeWhere((id, _) => !usedPaints.contains(id));
     return SvgParseResult(
       document: SvgDocument(
         viewBox: viewBox,
@@ -80,6 +103,9 @@ class SvgParser {
         children: children,
         clipPaths: Map.unmodifiable(_clipPaths),
         dropShadows: Map.unmodifiable(_dropShadows),
+        gradients: Map.unmodifiable(_gradients),
+        patterns: Map.unmodifiable(_patterns),
+        maskRegions: Map.unmodifiable(_maskRegions),
       ),
       warnings: List.unmodifiable(_warnings),
     );
@@ -140,6 +166,8 @@ class SvgParser {
         _parseClipPath(element, inherited);
         return null;
       case 'linearGradient':
+        _parseGradient(element);
+        return null;
       case 'radialGradient':
         throw const DotdartUnsupportedFeatureException('Gradients are not supported.');
       case 'use':
@@ -151,6 +179,7 @@ class SvgParser {
       case 'tspan':
         throw const DotdartUnsupportedFeatureException('Text elements are not supported.');
       case 'image':
+        if (_imageDefinitions.contains(element)) return null;
         throw const DotdartUnsupportedFeatureException('Embedded images are not supported.');
       case 'style':
         throw const DotdartUnsupportedFeatureException(
@@ -162,8 +191,11 @@ class SvgParser {
         _dropShadows[id] = SvgDropShadowParser.parse(element);
         return null;
       case 'mask':
+        _parseMask(element);
+        return null;
       case 'pattern':
-        throw const DotdartUnsupportedFeatureException('Filters, masks, and patterns are not supported.');
+        _parsePattern(element);
+        return null;
       case 'title':
       case 'desc':
       case 'metadata':
@@ -287,6 +319,317 @@ class SvgParser {
     return SvgPolygon(id: element.attrs['id'], style: style, transform: _parseTransform(element), points: points);
   }
 
+  void _validateMaskedContent(SvgElement element) {
+    var target = element;
+    while (target is SvgGroup) {
+      if (target.children.length != 1) {
+        throw const DotdartUnsupportedFeatureException(
+          'Masked content must contain one filled shape without a stroke.',
+        );
+      }
+      target = target.children.single;
+    }
+    if (target.style.strokeColor != null || (target.style.fillColor == null && target.style.fillServerId == null)) {
+      throw const DotdartUnsupportedFeatureException('Masked content must contain one filled shape without a stroke.');
+    }
+  }
+
+  void _validatePaintFilters(List<SvgElement> elements, {bool filtered = false}) {
+    for (final element in elements) {
+      if (element.style.maskId != null) _validateMaskedContent(element);
+      final insideFilter = filtered || element.style.filterId != null;
+      if (insideFilter && (element.style.fillServerId != null || element.style.maskId != null)) {
+        throw const DotdartUnsupportedFeatureException(
+          'Gradient fills, image patterns, and masks combined with drop shadows are not supported.',
+        );
+      }
+      if (element is SvgGroup) {
+        _validatePaintFilters(element.children, filtered: insideFilter);
+        continue;
+      }
+      final pattern = _patterns[element.style.fillServerId];
+      if (pattern != null) {
+        final bounds = SvgGeometryBounds.of(element);
+        if (![bounds.$1, bounds.$2, bounds.$3, bounds.$4].every((value) => value.isFinite)) {
+          throw const DotdartInvalidSvgException('Image pattern geometry must be finite.');
+        }
+        final width = pattern.objectBoundingBox ? 1.0 : bounds.$3 - bounds.$1;
+        final height = pattern.objectBoundingBox ? 1.0 : bounds.$4 - bounds.$2;
+        final columns = width / pattern.width;
+        final rows = height / pattern.height;
+        if (!columns.isFinite || !rows.isFinite || (columns.ceil() + 1) * (rows.ceil() + 1) > 4096) {
+          throw const DotdartUnsupportedFeatureException(
+            'SVG image pattern exceeds 4096 visible tiles. Use a larger tile.',
+          );
+        }
+      }
+    }
+  }
+
+  void _collectUsedPaints(List<SvgElement> elements, Set<String> ids) {
+    for (final element in elements) {
+      if (element is SvgGroup) {
+        _collectUsedPaints(element.children, ids);
+      } else if (element.style.fillServerId case final id?) {
+        ids.add(id);
+      }
+    }
+  }
+
+  void _collectDefinitions(XElement element, {bool insideDefs = false}) {
+    if (element.attrs['id'] case final id?) _definitions[id] = element;
+    if (insideDefs && element.tag == 'image') _imageDefinitions.add(element);
+    for (final child in element.children) {
+      _collectDefinitions(child, insideDefs: insideDefs || element.tag == 'defs');
+    }
+  }
+
+  double _number(String? raw, {required double fallback}) {
+    if (raw == null) return fallback;
+    final value = raw.endsWith('%')
+        ? (double.tryParse(raw.substring(0, raw.length - 1)) ?? double.nan) / 100
+        : double.tryParse(raw);
+    if (value == null || !value.isFinite) throw DotdartInvalidSvgException('Expected a finite SVG number: "$raw".');
+    return value;
+  }
+
+  void _checkAttributes(XElement element, Set<String> allowed) {
+    for (final name in element.attrs.keys) {
+      if (!allowed.contains(name)) {
+        throw DotdartUnsupportedFeatureException('Unsupported attribute "$name" on <${element.tag}>.');
+      }
+    }
+  }
+
+  String _definitionId(XElement element) {
+    final id = element.attrs['id'];
+    if (id == null) throw DotdartInvalidSvgException('<${element.tag}> requires an id.');
+    return id;
+  }
+
+  String? _localRef(String? raw) {
+    if (raw == null || raw.trim() == 'none') return null;
+    final match = RegExp(r'^url\(#([^)]+)\)$').firstMatch(raw.trim());
+    if (match == null) throw const DotdartUnsupportedFeatureException('SVG references must use url(#id).');
+    return match.group(1)!;
+  }
+
+  String? _paintServerRef(String raw) {
+    if (!raw.trim().startsWith('url(')) return null;
+    final id = _localRef(raw)!;
+    final definition = _definitions[id];
+    if (definition == null) throw DotdartInvalidSvgException('SVG paint "$id" was not found.');
+    switch (definition.tag) {
+      case 'linearGradient':
+        _parseGradient(definition);
+      case 'pattern':
+        _parsePattern(definition);
+      default:
+        throw DotdartUnsupportedFeatureException('Unsupported SVG paint <${definition.tag}>.');
+    }
+    return id;
+  }
+
+  void _parseGradient(XElement element) {
+    final id = _definitionId(element);
+    if (_gradients.containsKey(id)) return;
+    _checkAttributes(element, {'id', 'x1', 'y1', 'x2', 'y2', 'gradientUnits', 'spreadMethod'});
+    if (element.attrs['gradientUnits'] != 'userSpaceOnUse' || (element.attrs['spreadMethod'] ?? 'pad') != 'pad') {
+      throw const DotdartUnsupportedFeatureException(
+        'Linear gradients require gradientUnits="userSpaceOnUse" and spreadMethod="pad".',
+      );
+    }
+    // Percentages in user space depend on the viewport, which this subset does not resolve.
+    if (['x1', 'y1', 'x2', 'y2'].any((key) => element.attrs[key]?.contains('%') ?? false)) {
+      throw const DotdartUnsupportedFeatureException('Linear gradient coordinates must use numbers, not percentages.');
+    }
+    final colors = <(double, double, double, double)>[];
+    final stops = <double>[];
+    for (final stop in element.children) {
+      if (stop.tag != 'stop') {
+        throw const DotdartUnsupportedFeatureException('Linear gradients may only contain stops.');
+      }
+      _checkAttributes(stop, {'offset', 'stop-color', 'stop-opacity'});
+      final color = _parseColor(stop.attrs['stop-color'] ?? 'black');
+      final rgba = color is _ConcreteColor
+          ? color.value
+          : color is _NoneColor
+          ? (0.0, 0.0, 0.0, 0.0)
+          : null;
+      if (rgba == null) throw const DotdartUnsupportedFeatureException('Unsupported SVG gradient stop color.');
+      final offset = _number(stop.attrs['offset'], fallback: 0).clamp(0.0, 1.0);
+      stops.add(stops.isEmpty || offset >= stops.last ? offset : stops.last);
+      colors.add((
+        rgba.$1,
+        rgba.$2,
+        rgba.$3,
+        rgba.$4 * _number(stop.attrs['stop-opacity'], fallback: 1).clamp(0.0, 1.0),
+      ));
+    }
+    if (stops.isEmpty) throw const DotdartInvalidSvgException('Linear gradients require at least one stop.');
+    _gradients[id] = SvgLinearGradient(
+      x1: _number(element.attrs['x1'], fallback: 0),
+      y1: _number(element.attrs['y1'], fallback: 0),
+      x2: _number(element.attrs['x2'], fallback: _viewBox.width),
+      y2: _number(element.attrs['y2'], fallback: 0),
+      colors: List.unmodifiable(colors),
+      stops: List.unmodifiable(stops),
+    );
+  }
+
+  void _parsePattern(XElement element) {
+    final id = _definitionId(element);
+    if (_patterns.containsKey(id)) return;
+    _checkAttributes(element, {'id', 'x', 'y', 'width', 'height', 'patternUnits', 'patternContentUnits'});
+    final units = element.attrs['patternUnits'] ?? 'objectBoundingBox';
+    final contentUnits = element.attrs['patternContentUnits'] ?? 'userSpaceOnUse';
+    if (units != contentUnits ||
+        (units != 'userSpaceOnUse' && units != 'objectBoundingBox') ||
+        element.children.length != 1) {
+      throw const DotdartUnsupportedFeatureException(
+        'PNG patterns require matching patternUnits and patternContentUnits and one image or image reference.',
+      );
+    }
+    var image = element.children.single;
+    var matrix = const SvgMatrix(a: 1, b: 0, c: 0, d: 1, e: 0, f: 0);
+    if (image.tag == 'use') {
+      _checkAttributes(image, {'href', 'transform'});
+      final href = image.attrs['href'];
+      if (href == null || !href.startsWith('#') || _definitions[href.substring(1)]?.tag != 'image') {
+        throw const DotdartUnsupportedFeatureException('Pattern use must reference a local embedded image.');
+      }
+      matrix = SvgMatrix.compose(_parseTransform(image) ?? []);
+      image = _definitions[href.substring(1)]!;
+    }
+    if (image.tag != 'image' || matrix.b != 0 || matrix.c != 0 || matrix.a <= 0 || matrix.d <= 0) {
+      throw const DotdartUnsupportedFeatureException('PNG patterns support positive scale and translation only.');
+    }
+    _checkAttributes(image, {'id', 'href', 'x', 'y', 'width', 'height', 'preserveAspectRatio'});
+    if (image.attrs['preserveAspectRatio'] != 'none') {
+      throw const DotdartUnsupportedFeatureException('Pattern images require preserveAspectRatio="none".');
+    }
+    final href = image.attrs['href'] ?? '';
+    if (href.length > 32 * 1024 * 1024) {
+      throw const DotdartInvalidSvgException('Embedded PNG data must not exceed 32 MB.');
+    }
+    if (!href.startsWith('data:image/png;base64,')) {
+      throw const DotdartUnsupportedFeatureException('Pattern images must be embedded base64 PNGs.');
+    }
+    Uint8List bytes;
+    img.Image? decoded;
+    try {
+      bytes = base64Decode(href.substring('data:image/png;base64,'.length));
+      final decoder = img.PngDecoder();
+      final info = decoder.startDecode(bytes);
+      if (info == null || info.width * info.height > 16777216 || info.numFrames != 1) {
+        throw const FormatException('Expected a static PNG of at most 16 megapixels.');
+      }
+      decoded = decoder.decodeFrame(0);
+    } on Object catch (error) {
+      throw DotdartInvalidSvgException('Invalid embedded PNG: $error');
+    }
+    if (decoded == null) throw const DotdartInvalidSvgException('Invalid embedded PNG.');
+    if (units == 'userSpaceOnUse' &&
+        [...element.attrs.values, ...image.attrs.values].any((value) => value.contains('%'))) {
+      throw const DotdartUnsupportedFeatureException('User-space pattern dimensions must use numbers.');
+    }
+    final width = _number(element.attrs['width'], fallback: 0);
+    final height = _number(element.attrs['height'], fallback: 0);
+    final imageWidth = _number(image.attrs['width'], fallback: 0) * matrix.a;
+    final imageHeight = _number(image.attrs['height'], fallback: 0) * matrix.d;
+    if (width <= 0 ||
+        height <= 0 ||
+        imageWidth <= 0 ||
+        imageHeight <= 0 ||
+        !imageWidth.isFinite ||
+        !imageHeight.isFinite) {
+      throw const DotdartInvalidSvgException('Pattern and image dimensions must be positive.');
+    }
+    _patterns[id] = SvgImagePattern(
+      bytes: List.unmodifiable(bytes),
+      pixelWidth: decoded.width,
+      pixelHeight: decoded.height,
+      x: _number(element.attrs['x'], fallback: 0),
+      y: _number(element.attrs['y'], fallback: 0),
+      width: width,
+      height: height,
+      imageX: _number(image.attrs['x'], fallback: 0) * matrix.a + matrix.e,
+      imageY: _number(image.attrs['y'], fallback: 0) * matrix.d + matrix.f,
+      imageWidth: imageWidth,
+      imageHeight: imageHeight,
+      objectBoundingBox: units == 'objectBoundingBox',
+    );
+  }
+
+  String? _maskRef(String? raw) {
+    final id = _localRef(raw);
+    if (id == null) return null;
+    final mask = _definitions[id];
+    if (mask == null || mask.tag != 'mask') throw DotdartInvalidSvgException('SVG mask "$id" was not found.');
+    _parseMask(mask);
+    return id;
+  }
+
+  void _parseMask(XElement element) {
+    final id = _definitionId(element);
+    if (_maskRegions.containsKey(id)) return;
+    _checkAttributes(element, {
+      'id',
+      'x',
+      'y',
+      'width',
+      'height',
+      'maskUnits',
+      'maskContentUnits',
+      'style',
+      'mask-type',
+    });
+    if (element.attrs['maskUnits'] != 'userSpaceOnUse' ||
+        (element.attrs['maskContentUnits'] ?? 'userSpaceOnUse') != 'userSpaceOnUse' ||
+        !['luminance', 'alpha'].contains(element.attrs['mask-type'] ?? 'luminance') ||
+        (element.attrs['style'] != null &&
+            element.attrs['style']!.replaceAll(' ', '').replaceAll(';', '') != 'mask-type:luminance') ||
+        element.children.length != 1 ||
+        element.children.single.tag != 'path') {
+      throw const DotdartUnsupportedFeatureException('Masks support one opaque white path in user space only.');
+    }
+    if (element.attrs.values.any((value) => value.contains('%'))) {
+      throw const DotdartUnsupportedFeatureException('Mask regions must use numeric user coordinates.');
+    }
+    _checkAttributes(element.children.single, {
+      'id',
+      'd',
+      'fill',
+      'fill-rule',
+      'clip-rule',
+      'transform',
+      'fill-opacity',
+      'opacity',
+      'stroke',
+    });
+    final path = _parsePath(element.children.single, _defaultStyle);
+    if (path.style.fillColor != (1.0, 1.0, 1.0, 1.0) ||
+        path.style.fillOpacity != 1 ||
+        path.style.opacity != 1 ||
+        path.style.strokeColor != null ||
+        path.style.fillServerId != null ||
+        path.style.filterId != null ||
+        path.style.clipPathId != null ||
+        path.style.maskId != null) {
+      throw const DotdartUnsupportedFeatureException('Masks support one opaque white path only.');
+    }
+    final width = _number(element.attrs['width'], fallback: 0);
+    final height = _number(element.attrs['height'], fallback: 0);
+    if (width <= 0 || height <= 0) throw const DotdartInvalidSvgException('Mask dimensions must be positive.');
+    _maskRegions[id] = (
+      _number(element.attrs['x'], fallback: 0),
+      _number(element.attrs['y'], fallback: 0),
+      width,
+      height,
+    );
+    _clipPaths[id] = SvgClipPath(id: id, children: [path], clipRule: path.style.fillRule);
+  }
+
   void _validateIds(XElement root) {
     final ids = <String>{};
 
@@ -361,7 +704,11 @@ class SvgParser {
 
   SvgStyle _resolveStyle(XElement element, SvgStyle inherited) {
     final fillRaw = element.attrs['fill'];
-    final fillColor = fillRaw != null ? _parseColor(fillRaw) : _inheritColor;
+    final fillServerId = fillRaw == null ? inherited.fillServerId : _paintServerRef(fillRaw);
+    final fillColor = fillRaw != null ? (fillServerId == null ? _parseColor(fillRaw) : _noneColor) : _inheritColor;
+    if (element.attrs['stroke']?.trim().startsWith('url(') ?? false) {
+      throw const DotdartUnsupportedFeatureException('Gradient and pattern strokes are not supported.');
+    }
     final strokeRaw = element.attrs['stroke'];
     final strokeColor = strokeRaw != null ? _parseColor(strokeRaw) : _inheritColor;
 
@@ -385,6 +732,8 @@ class SvgParser {
       opacity: _parseOptionalOpacity(element.attrs['opacity']) ?? inherited.opacity,
       clipPathId: _parseClipPathRef(element.attrs['clip-path']),
       filterId: _parseFilterRef(element.attrs['filter']),
+      fillServerId: fillServerId,
+      maskId: _maskRef(element.attrs['mask']),
     );
   }
 
@@ -399,6 +748,7 @@ class SvgParser {
     if (named != null) return _ConcreteColor(named);
     if (trimmed.startsWith('#')) return _parseHexColor(trimmed);
     if (trimmed.startsWith('rgb')) return _parseRgbColor(trimmed);
+    if (trimmed.startsWith('url(')) throw const DotdartUnsupportedFeatureException('Unsupported SVG paint reference.');
     return _inheritColor;
   }
 
@@ -534,7 +884,7 @@ class SvgParser {
   double? _parseLength(String? raw) {
     if (raw == null) return null;
     final trimmed = raw.trim();
-    final match = RegExp(r'^([+-]?\d+(?:\.\d+)?)').firstMatch(trimmed);
+    final match = RegExp(r'^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)').firstMatch(trimmed);
     return match != null ? double.tryParse(match.group(1)!) : null;
   }
 

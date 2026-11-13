@@ -4,6 +4,34 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgPathData', () {
+    test('when parsing relative arcs with adjacent flags, it should preserve absolute geometry', () {
+      final arc = SvgPathData.parse('M10 20a-5 6 30 0110 15').last as SvgArcTo;
+      expect(
+        (arc.rx, arc.ry, arc.rotation, arc.largeArc, arc.clockwise, arc.x, arc.y),
+        (5.0, 6.0, 30.0, false, true, 20.0, 35.0),
+      );
+    });
+
+    test('when an arc has zero radius, it should become a straight line', () {
+      final line = SvgPathData.parse('M0 0A0 10 0 0 1 20 30').last as SvgLineTo;
+      expect((line.x, line.y), (20.0, 30.0));
+    });
+
+    test('when an arc ends at its start, it should emit no geometry', () {
+      expect(SvgPathData.parse('M10 20A5 6 0 0 1 10 20'), hasLength(1));
+    });
+
+    for (final data in ['M0 0A5 5 0 2 1 10 10', 'M0 0A5 5 0 0 1', 'M0 0A5 5 1e999 0 1 10 10']) {
+      test('when an arc is malformed as $data, it should fail', () {
+        expect(() => SvgPathData.parse(data), throwsFormatException);
+      });
+    }
+
+    test('when a smooth curve follows an arc, it should reset the reflected control point', () {
+      final curve = SvgPathData.parse('M0 0A5 5 0 0 1 10 10S20 20 30 30').last as SvgCubicTo;
+      expect((curve.x1, curve.y1), (10.0, 10.0));
+    });
+
     test('when parsing M x y, it should produce a single SvgMoveTo', () {
       final cmds = SvgPathData.parse('M 10 20');
 
