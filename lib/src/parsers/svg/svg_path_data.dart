@@ -1,12 +1,10 @@
 import '../../models/svg_element.dart';
-import '../lottie_parser.dart' show DotdartUnsupportedFeatureException;
 
 /// Parses SVG path `d` attribute values into absolute [SvgPathCommand]s.
 ///
 /// All relative commands (lowercase) are resolved to absolute coordinates
 /// at parse time. Smooth cubic (`S`/`s`) and smooth quad (`T`/`t`) commands
-/// are resolved to explicit control points. Arc commands (`A`/`a`) are not
-/// yet supported and throw [DotdartUnsupportedFeatureException].
+/// are resolved to explicit control points. Arc endpoints are made absolute.
 class SvgPathData {
   static List<SvgPathCommand> parse(String d) {
     final commands = <SvgPathCommand>[];
@@ -188,7 +186,44 @@ class SvgPathData {
             }
           case 'A':
             {
-              throw const DotdartUnsupportedFeatureException('Arc commands (A/a) are not yet supported. ');
+              final rx = p.readNumber();
+              final ry = p.readNumber();
+              final rotation = p.readNumber();
+              final largeArc = p.readFlag();
+              final clockwise = p.readFlag();
+              final end = p.readCoordPair(relative: isRelative, curX: curX, curY: curY);
+              if (rx == null ||
+                  ry == null ||
+                  rotation == null ||
+                  end == null ||
+                  !rx.isFinite ||
+                  !ry.isFinite ||
+                  !rotation.isFinite ||
+                  !end.$1.isFinite ||
+                  !end.$2.isFinite) {
+                throw const FormatException('SVG arc requires finite radii, rotation, flags, and endpoint.');
+              }
+              if (end.$1 != curX || end.$2 != curY) {
+                commands.add(
+                  rx == 0 || ry == 0
+                      ? SvgLineTo(x: end.$1, y: end.$2)
+                      : SvgArcTo(
+                          rx: rx.abs(),
+                          ry: ry.abs(),
+                          rotation: rotation,
+                          largeArc: largeArc,
+                          clockwise: clockwise,
+                          x: end.$1,
+                          y: end.$2,
+                        ),
+                );
+              }
+              curX = end.$1;
+              curY = end.$2;
+              prevControlX = curX;
+              prevControlY = curY;
+              lastCmd = 'A';
+              break;
             }
           case 'Z':
             {
@@ -270,6 +305,14 @@ class _PathTokenizer {
       }
     }
     return double.parse(input.substring(start, _pos));
+  }
+
+  bool readFlag() {
+    _skip();
+    if (_pos >= input.length || (input[_pos] != '0' && input[_pos] != '1')) {
+      throw const FormatException('SVG arc flags must be 0 or 1.');
+    }
+    return input[_pos++] == '1';
   }
 
   double? peekNumber() {

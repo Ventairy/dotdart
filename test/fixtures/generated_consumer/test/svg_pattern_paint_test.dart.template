@@ -1,0 +1,74 @@
+import 'package:dotdart_generated_consumer_fixture/gen/icons.g.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets('when sharing a paint across differently colored widgets, it should retain each recorded color', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Row(
+          children: [
+            $Icons.fixtureIcon(width: 40, color1: Colors.red),
+            $Icons.fixtureIcon(width: 40, color1: Colors.blue),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final paints = tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .where((paint) => paint.painter != null)
+        .toList();
+    final colors = <Color>[];
+    for (final paint in paints) {
+      final canvas = TestRecordingCanvas();
+      paint.painter!.paint(canvas, const Size(40, 40));
+      colors.addAll(
+        canvas.invocations
+            .where((call) => call.invocation.memberName == #drawPath)
+            .map((call) => (call.invocation.positionalArguments.last as Paint).color),
+      );
+    }
+    expect(colors.map((color) => color.toARGB32()).toList(), [Colors.red.toARGB32(), Colors.blue.toARGB32()]);
+  });
+
+  for (final (name, clipCount, imageDraws) in [
+    ('image_patterns.svg', 0, 4),
+    ('image_pattern_crop.svg', 9, 9),
+    ('masked_arc.svg', 0, 0),
+  ]) {
+    testWidgets('when painting $name, it should clip only images extending outside their tile', (tester) async {
+      const key = ValueKey('pattern');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: KeyedSubtree(key: key, child: $Icons.findByName(name, width: 100)!),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (imageCache.pendingImageCount > 0) {
+          if (DateTime.now().isAfter(deadline)) throw StateError('Image decode timed out');
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
+      await tester.pumpAndSettle();
+      final paint = tester.widget<CustomPaint>(
+        find.descendant(of: find.byKey(key), matching: find.byType(CustomPaint)).last,
+      );
+      final canvas = TestRecordingCanvas();
+      paint.painter!.paint(canvas, const Size(100, 100));
+      expect(
+        (
+          canvas.invocations.where((call) => call.invocation.memberName == #clipRect).length,
+          canvas.invocations.where((call) => call.invocation.memberName == #drawImageRect).length,
+        ),
+        (clipCount, imageDraws),
+      );
+    });
+  }
+}

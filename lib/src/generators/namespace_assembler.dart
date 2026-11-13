@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'generated_asset_spec.dart';
 import 'image_generator.dart';
 import 'shared_emit.dart';
+import 'svg_pattern_emitter.dart';
 
 /// Assembles a complete `.g.dart` file for one namespace.
 ///
@@ -92,6 +93,7 @@ class NamespaceAssembler {
 
   void _writeSharedCode(StringBuffer b) {
     final types = assets.map((a) => a.assetType).toSet();
+    if (assets.any((asset) => asset.requiresEmbeddedImages)) b.write(SvgPatternEmitter.emit());
     if (types.contains(DotdartAssetType.svg) || types.contains(DotdartAssetType.lottie)) {
       b.write(SharedEmitter.applyOpacityFunction());
     }

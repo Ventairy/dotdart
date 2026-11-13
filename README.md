@@ -81,7 +81,9 @@ flutter:
 
 Images and GIFs remain Flutter assets because their generated widgets use
 `Image.asset`. SVG and Lottie inputs are compiled into Dart and do not need to
-be listed under `flutter.assets`.
+be listed under `flutter.assets`. Supported SVG linear gradients, arc paths, and
+embedded PNG patterns also remain self-contained. See the
+[SVG support limits](doc/asset-support.md#svg) before exporting artwork.
 
 Generate the libraries:
 

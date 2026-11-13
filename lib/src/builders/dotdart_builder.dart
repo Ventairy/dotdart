@@ -246,6 +246,7 @@ class _DotdartBuilder implements Builder {
       widgetSource: generator.generateWidgetClass(),
       requiresTypedData: generator.requiresTypedData,
       requiresImageFilter: generator.requiresImageFilter,
+      requiresEmbeddedImages: generator.requiresEmbeddedImages,
     );
   }
 
@@ -275,6 +276,7 @@ class _DotdartBuilder implements Builder {
     bool requiresPathMetrics = false,
     bool requiresTypedData = false,
     bool requiresImageFilter = false,
+    bool requiresEmbeddedImages = false,
   }) {
     return DiscoveredAsset(
       assetId: assetId,
@@ -290,6 +292,7 @@ class _DotdartBuilder implements Builder {
         requiresPathMetrics: requiresPathMetrics,
         requiresTypedData: requiresTypedData,
         requiresImageFilter: requiresImageFilter,
+        requiresEmbeddedImages: requiresEmbeddedImages,
       ),
     );
   }

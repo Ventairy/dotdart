@@ -1,3 +1,24 @@
+## 0.11.5
+
+- Added SVG linear gradient fills in user coordinates and elliptical arc paths,
+  with cached shaders and geometry.
+- Added SVG patterns containing an embedded PNG or a local image reference.
+  Generated widgets decode PNGs sequentially at display size and use Flutter's
+  image cache without runtime SVG parsing or extra asset files.
+- Added masks containing one opaque white path, compiled as clipping without
+  offscreen compositing layers.
+- Reduced repeated SVG painting work with shared paints and cached image
+  shaders for single-tile PNG fills. Eligible masked image fills reuse their
+  intersected outline instead of repeating clipping work.
+- SVG PNGs stay visible during resizing, skip obsolete pending decode sizes,
+  and avoid reloading when their image configuration is unchanged.
+- Fixed rotated and skewed SVG image patterns requesting incorrect decode
+  dimensions when widget width and height use different scales.
+- Compute curved PNG-pattern bounds during generation, preserving SVG
+  bounding-box coordinates without runtime curve calculations. Arc paths with
+  bounding-box image patterns fail explicitly; use user-space image patterns.
+- Fixed SVG lengths written in scientific notation being truncated.
+
 ## 0.11.4
 
 - Added optional caller-owned image caches to generated image and GIF widgets and

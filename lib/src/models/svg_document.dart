@@ -1,5 +1,7 @@
 import 'svg_drop_shadow.dart';
 import 'svg_element.dart';
+import 'svg_image_pattern.dart';
+import 'svg_linear_gradient.dart';
 import 'svg_style.dart';
 
 /// Parsed SVG viewBox.
@@ -39,6 +41,9 @@ class SvgDocument {
     this.height,
     this.clipPaths = const {},
     this.dropShadows = const {},
+    this.gradients = const {},
+    this.patterns = const {},
+    this.maskRegions = const {},
   });
 
   /// The `viewBox` attribute (`minX minY width height`).
@@ -61,6 +66,15 @@ class SvgDocument {
 
   /// Validated drop-shadow filters keyed by their source ID.
   final Map<String, SvgDropShadow> dropShadows;
+
+  /// Linear gradients keyed by source ID.
+  final Map<String, SvgLinearGradient> gradients;
+
+  /// Embedded PNG patterns keyed by source ID.
+  final Map<String, SvgImagePattern> patterns;
+
+  /// User-space regions for masks reduced to clip paths.
+  final Map<String, (double, double, double, double)> maskRegions;
 
   /// Computed width for the widget's native aspect: uses [width] when set,
   /// falls back to [viewBox] dimensions.

@@ -4,11 +4,199 @@ import 'package:dotdart/src/generators/svg_generator.dart';
 import 'package:dotdart/src/models/svg_document.dart';
 import 'package:dotdart/src/models/svg_element.dart';
 import 'package:dotdart/src/models/svg_style.dart';
+import 'package:dotdart/src/parsers/lottie_parser.dart';
 import 'package:dotdart/src/parsers/svg/svg_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgGenerator', () {
+    test('when arc geometry uses bounding-box image coordinates, it should explain supported alternatives', () {
+      final source = File(
+        'test/fixtures/generated_consumer/assets/icons/curved_pattern.svg',
+      ).readAsStringSync().replaceFirst('M0 0C100 100 100 100 0 100Z', 'M0 0A5 5 0 0 1 10 0Z');
+      expect(
+        () => SvgGenerator(SvgParser.parse(source).document, 'assets/icons/arc_pattern.svg').generateWidgetClass(),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (error) => error.message,
+            'message',
+            contains('userSpaceOnUse'),
+          ),
+        ),
+      );
+    });
+
+    test('when a curved path uses bounding-box image coordinates, it should emit exact build-time bounds', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/image_patterns.svg')
+          .readAsStringSync()
+          .replaceFirst(
+            'patternUnits="userSpaceOnUse"',
+            'patternUnits="objectBoundingBox" patternContentUnits="objectBoundingBox"',
+          )
+          .replaceFirst('x="-25" y="-25" width="100" height="100"', 'width="1" height="1"')
+          .replaceFirst('width="100" height="100" preserveAspectRatio', 'width="1" height="1" preserveAspectRatio')
+          .replaceFirst('M0 0H100V100H0Z', 'M0 0C100 100 100 100 0 100Z');
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/curve.svg').generateWidgetClass();
+      expect(code, contains('bounds: const Rect.fromLTWH(0, 0, 75, 100)'));
+    });
+
+    test(
+      'when a single patterned path has a mask, it should cache intersections and keep original shader coordinates',
+      () {
+        final source = File(
+          'test/fixtures/generated_consumer/assets/icons/masked_pattern_intersection.svg',
+        ).readAsStringSync();
+        final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/masked.svg').generateWidgetClass();
+        expect(
+          code,
+          allOf(
+            contains(
+              'static final Path _maskedPattern0 = Path.combine(PathOperation.intersect, Path.combine(PathOperation.intersect,',
+            ),
+            contains('canvas.drawPath(_maskedPattern0, maskedPaint'),
+            contains('shaderPaint(_pattern0Geometry1)'),
+            contains('canvas.clipPath(__clip0)'),
+            isNot(matches(r'void paint[\s\S]*Path.combine')),
+          ),
+        );
+      },
+    );
+
+    test('when a masked pattern has a transformed child, it should retain the scoped drawing pipeline', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/masked_pattern_intersection.svg')
+          .readAsStringSync()
+          .replaceFirst('<path fill="url(#tile)"', '<path transform="translate(1 0)" fill="url(#tile)"');
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/masked.svg').generateWidgetClass();
+      expect(code, isNot(contains('static final Path _maskedPattern')));
+    });
+
+    test(
+      'when a single patterned rectangle has a mask, it should include the rectangle geometry in its cached intersection',
+      () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/masked_pattern_intersection.svg')
+            .readAsStringSync()
+            .replaceFirst(
+              '<path fill="url(#tile)" d="M20 0H80V100H20Z"/>',
+              '<rect x="20" width="60" height="100" fill="url(#tile)"/>',
+            );
+        final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/masked.svg').generateWidgetClass();
+        expect(code, allOf(contains('static final Path _maskedPattern0'), contains('(Path()..addRect(_rect1))')));
+      },
+    );
+
+    test('when rebuilding SVG painters, it should reuse scratch paints across widget instances', () {
+      final document = SvgParser.parse(
+        '<svg viewBox="0 0 20 20"><rect width="20" height="20" fill="red" stroke="blue"/></svg>',
+      ).document;
+      expect(
+        SvgGenerator(document, 'assets/icons/shared.svg').generateWidgetClass(),
+        allOf(contains('static final Paint _fillPaint'), contains('static final Paint _strokePaint')),
+      );
+    });
+
+    test('when rebuilding embedded PNG painters, it should reuse the sampling paint', () {
+      final document = SvgParser.parse(
+        File('test/fixtures/generated_consumer/assets/icons/masked_arc.svg').readAsStringSync(),
+      ).document;
+      expect(
+        SvgGenerator(document, 'assets/icons/shared.svg').generateWidgetClass(),
+        contains('static final Paint _patternPaint'),
+      );
+    });
+
+    test(
+      'when image patterns have identity transforms, it should retain static decode factors without square roots',
+      () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/image_patterns.svg').readAsStringSync();
+        final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/pattern.svg').generateWidgetClass();
+        expect(
+          code,
+          allOf(
+            contains('static final double _decodeWidth0'),
+            contains('static final double _decodeHeight0'),
+            isNot(contains('static double _decodeWidth0(')),
+            isNot(contains('math.sqrt(')),
+          ),
+        );
+      },
+    );
+
+    test('when an image pattern rotates, it should size decoding along the transformed source axes', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/rotated_pattern.svg').readAsStringSync();
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/rotated.svg').generateWidgetClass();
+      expect(
+        code,
+        allOf(
+          contains(
+            'static double _decodeWidth0({required double scaleX, required double scaleY}) => _pattern0Geometry0.imageWidth * 1 * scaleY;',
+          ),
+          contains(
+            'static double _decodeHeight0({required double scaleX, required double scaleY}) => _pattern0Geometry0.imageHeight * 1 * scaleX;',
+          ),
+          isNot(contains('math.sqrt(')),
+        ),
+      );
+    });
+
+    test('when an image pattern shears, it should combine both physical scale components for the source axis', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/sheared_pattern.svg').readAsStringSync();
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/sheared.svg').generateWidgetClass();
+      expect(
+        code,
+        allOf(
+          contains('_pattern0Geometry0.imageWidth * math.sqrt((scaleX) * (scaleX) + (scaleY) * (scaleY))'),
+          contains('_decodeWidth0(scaleX: width / _viewBoxWidth, scaleY: height / _viewBoxHeight)'),
+        ),
+      );
+    });
+
+    test('when generating linear fills, it should cache shaders outside paint and avoid layers', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/gradient_paints.svg').readAsStringSync();
+      final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/gradient.svg');
+      expect(
+        generator.generateWidgetClass(),
+        allOf(
+          contains('static final Paint _gradient0'),
+          contains('canvas.drawRect(_rect0, (_gradient0'),
+          isNot(matches(r'void paint[\s\S]*createShader')),
+          isNot(contains('saveLayer(')),
+        ),
+      );
+    });
+
+    test('when generating a masked image, it should cache bytes and tiles and clip without layers', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/masked_arc.svg').readAsStringSync();
+      final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/masked.svg');
+      expect(
+        [generator.requiresEmbeddedImages, generator.requiresTypedData, generator.generateWidgetClass()],
+        [
+          true,
+          true,
+          allOf(
+            contains('static final MemoryImage _image0'),
+            contains('static final _pattern0Geometry'),
+            contains('canvas.clipPath(__clip0)'),
+            contains('arcToPoint('),
+            contains('ResizeImage('),
+            isNot(contains('saveLayer(')),
+            isNot(matches(r'void paint[\s\S]*(?:Uint8List|MemoryImage)\(')),
+          ),
+        ],
+      );
+    });
+
+    for (final name in ['gradient_paints', 'image_patterns', 'masked_arc']) {
+      test('when generating $name, it should keep constructor and accessor parameters in parity', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/$name.svg').readAsStringSync();
+        final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/$name.svg');
+        final code = generator.generateWidgetClass();
+        expect(
+          generator.params.map((param) => code.contains(param.constructorInitializer)).every((present) => present),
+          isTrue,
+        );
+      });
+    }
+
     test('when generating a drop shadow, it should cache paints and isolate bounded compositing', () {
       final source = File('test/fixtures/generated_consumer/assets/icons/drop_shadow.svg').readAsStringSync();
       final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/drop_shadow.svg');

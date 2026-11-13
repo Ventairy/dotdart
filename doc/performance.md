@@ -17,6 +17,16 @@ application does less work while rendering.
 - Explicitly sized widgets remain finite inside unbounded parents such as
   `Column`.
 
+SVGs containing embedded PNG patterns keep their current image visible while
+another display size is prepared. Rapid size changes skip obsolete requests;
+rotated and skewed images account for both widget dimensions. Unchanged image
+settings reuse the decoded image.
+
+For moving a fixed-size icon, reuse the generated widget as the `child` of an
+`AnimatedBuilder` or transition when possible. This avoids rebuilding an
+unchanged icon during every animation frame. Large scenes that repaint many
+icons every frame still need profiling on target hardware.
+
 ## Images and GIFs
 
 - Intrinsic dimensions and dominant color are computed during generation.

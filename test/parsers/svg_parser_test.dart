@@ -8,6 +8,97 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgParser', () {
+    test('when a mask covers overlapping shapes, it should reject compositing that cannot become a clip', () {
+      final source = File(
+        'test/fixtures/generated_consumer/assets/icons/masked_arc.svg',
+      ).readAsStringSync().replaceFirst('</g>', '<rect width="100" height="100" fill="red"/></g>');
+      expect(() => SvgParser.parse(source), throwsA(isA<DotdartUnsupportedFeatureException>()));
+    });
+
+    test('when an image pattern would produce excessive tiles, it should fail at build time', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/masked_arc.svg')
+          .readAsStringSync()
+          .replaceFirst('width="1" height="1" patternContentUnits', 'width=".001" height=".001" patternContentUnits');
+      expect(() => SvgParser.parse(source), throwsA(isA<DotdartUnsupportedFeatureException>()));
+    });
+
+    for (final name in ['gradient_paints', 'image_patterns', 'masked_arc']) {
+      test('when parsing $name, it should accept the supported paint without warnings', () {
+        expect(
+          SvgParser.parse(File('test/fixtures/generated_consumer/assets/icons/$name.svg').readAsStringSync()).warnings,
+          isEmpty,
+        );
+      });
+    }
+
+    test('when parsing a gradient with scientific coordinates, it should preserve its endpoints and stops', () {
+      final document = SvgParser.parse(
+        File('test/fixtures/generated_consumer/assets/icons/gradient_paints.svg').readAsStringSync(),
+      ).document;
+      final gradient = document.gradients['fade']!;
+      expect(
+        [gradient.x1, gradient.x2, gradient.stops, gradient.colors],
+        [
+          0.0,
+          100.0,
+          [0.0, 1.0],
+          [(1.0, 0.0, 0.0, 1.0), (0.0, 0.0, 1.0, 1.0)],
+        ],
+      );
+    });
+
+    test('when parsing a PNG image reference, it should resolve its content scale at build time', () {
+      final pattern = SvgParser.parse(
+        File('test/fixtures/generated_consumer/assets/icons/masked_arc.svg').readAsStringSync(),
+      ).document.patterns['tile']!;
+      expect(
+        (pattern.objectBoundingBox, pattern.imageWidth, pattern.imageHeight, pattern.pixelWidth, pattern.pixelHeight),
+        (true, 1.0, 1.0, 128, 128),
+      );
+    });
+
+    for (final fill in ['#000', '#fff" opacity="0.5', '#fff" style="fill:black', '#fff" mask="url(#mask)']) {
+      test('when a mask path uses $fill, it should reject unsupported mask painting', () {
+        final source = File(
+          'test/fixtures/generated_consumer/assets/icons/masked_arc.svg',
+        ).readAsStringSync().replaceFirst('fill="#fff"', 'fill="$fill"');
+        expect(() => SvgParser.parse(source), throwsA(isA<DotdartUnsupportedFeatureException>()));
+      });
+    }
+
+    for (final replacement in ['https://example.com/picture.png', 'data:image/png;base64,broken']) {
+      test('when an embedded image uses $replacement, it should reject the invalid image', () {
+        final source = File(
+          'test/fixtures/generated_consumer/assets/icons/image_patterns.svg',
+        ).readAsStringSync().replaceFirst(RegExp('data:image/png;base64,[^" ]+'), replacement);
+        expect(
+          () => SvgParser.parse(source),
+          throwsA(anyOf(isA<DotdartUnsupportedFeatureException>(), isA<DotdartInvalidSvgException>())),
+        );
+      });
+    }
+
+    test('when a paint reference is missing, it should fail instead of inheriting a solid fill', () {
+      expect(
+        () => SvgParser.parse('<svg viewBox="0 0 10 10"><path fill="url(#missing)" d="M0 0H10V10Z"/></svg>'),
+        throwsA(isA<DotdartInvalidSvgException>()),
+      );
+    });
+
+    test('when an unused PNG pattern is defined, it should omit its runtime decoder', () {
+      final source = File(
+        'test/fixtures/generated_consumer/assets/icons/image_patterns.svg',
+      ).readAsStringSync().replaceFirst('fill="url(#tile)"', 'fill="red"');
+      expect(SvgParser.parse(source).document.patterns, isEmpty);
+    });
+
+    test('when an image outside defs has an id, it should reject unsupported direct image rendering', () {
+      expect(
+        () => SvgParser.parse('<svg viewBox="0 0 10 10"><image id="image" href="data:image/png;base64,broken"/></svg>'),
+        throwsA(isA<DotdartUnsupportedFeatureException>()),
+      );
+    });
+
     test('when parsing an exported drop shadow, it should accept the filter without warnings', () {
       final source = File('test/fixtures/generated_consumer/assets/icons/drop_shadow.svg').readAsStringSync();
       expect(SvgParser.parse(source).warnings, isEmpty);

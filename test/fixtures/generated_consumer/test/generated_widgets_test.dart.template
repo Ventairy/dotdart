@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dotdart_generated_consumer_fixture/gen/icons.g.dart';
@@ -15,6 +14,113 @@ void main() {
       imageCache
         ..clear()
         ..clearLiveImages();
+    });
+
+    for (final (name, samples, expected) in [
+      (
+        'gradient_paints.svg',
+        [(25, 50), (75, 50)],
+        [
+          [190, 0, 65, 255],
+          [62, 0, 193, 255],
+        ],
+      ),
+      (
+        'image_patterns.svg',
+        [(10, 10), (60, 10), (90, 10), (10, 60)],
+        [
+          [255, 0, 0, 255],
+          [0, 0, 255, 255],
+          [255, 0, 0, 255],
+          [0, 255, 0, 255],
+        ],
+      ),
+      (
+        'masked_arc.svg',
+        [(5, 5), (25, 25), (75, 25), (75, 75)],
+        [
+          [0, 255, 0, 255],
+          [255, 0, 0, 255],
+          [0, 0, 255, 255],
+          [255, 255, 0, 255],
+        ],
+      ),
+    ]) {
+      testWidgets('when rendering $name, it should preserve gradient, tile, or mask pixels', (tester) async {
+        final pixels = await _SvgPaintSamples.capture(tester, name: name, samples: samples);
+        expect(pixels, [
+          for (final pixel in expected) [for (final channel in pixel) closeTo(channel, 2)],
+        ]);
+      });
+    }
+
+    testWidgets('when displaying a small embedded PNG, it should decode only its physical display size', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _SvgPaintSamples.capture(tester, name: 'masked_arc.svg', width: 20, samples: [(5, 5)]);
+      expect(imageCache.currentSizeBytes, 20 * 20 * 4);
+    });
+
+    testWidgets('when an embedded image is resized and removed, it should release its stream listeners', (
+      tester,
+    ) async {
+      await _SvgPaintSamples.capture(tester, name: 'masked_arc.svg', samples: [(25, 25)]);
+      await tester.pumpWidget(MaterialApp(home: Center(child: $Icons.maskedArc(width: 20))));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await tester.runAsync(_SvgPaintSamples.waitForImages);
+      await tester.pumpAndSettle();
+      expect((tester.takeException(), imageCache.liveImageCount), (null, 0));
+    });
+
+    for (final (name, width, height, bytes) in [
+      ('rotated_pattern.svg', 20.0, 200.0, 128 * 10 * 4),
+      ('sheared_pattern.svg', 20.0, 60.0, 64 * 60 * 4),
+    ]) {
+      testWidgets('when decoding $name under nonuniform sizing, it should follow transformed source axes', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final widget = name == 'rotated_pattern.svg'
+            ? $Icons.rotatedPattern(width: width, height: height, maintainAspectRatio: false)
+            : $Icons.shearedPattern(width: width, height: height, maintainAspectRatio: false);
+        await tester.pumpWidget(MaterialApp(home: Center(child: widget)));
+        await tester.pumpAndSettle();
+        await tester.runAsync(_SvgPaintSamples.waitForImages);
+        await tester.pumpAndSettle();
+        expect(imageCache.currentSizeBytes, bytes);
+      });
+    }
+
+    testWidgets('when locale resources change without changing image configuration, it should retain decoded PNGs', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [_ChangingLocaleDelegate('first')],
+          home: Center(child: $Icons.maskedArc(width: 20)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(_SvgPaintSamples.waitForImages);
+      await tester.pumpAndSettle();
+      imageCache.clear();
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: const [_ChangingLocaleDelegate('second')],
+          home: Center(child: $Icons.maskedArc(width: 20)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(_SvgPaintSamples.waitForImages);
+      await tester.pumpAndSettle();
+      expect((imageCache.currentSizeBytes, tester.takeException()), (0, null));
     });
 
     for (final fileName in ['missing.svg', 'FIXTURE_ICON.svg', 'fixture_icon', 'assets/icons/fixture_icon.svg', '']) {
@@ -582,18 +688,40 @@ void main() {
       expect((removed, status.live, status.keepAlive), equals((true, true, false)));
     });
 
-    testWidgets('when an isolated preload fails, it should report the failure and allow the same asset to retry', (tester) async {
+    testWidgets('when an isolated preload fails, it should report the failure and allow the same asset to retry', (
+      tester,
+    ) async {
       final isolated = ImageCache();
-      addTearDown(() { isolated.clear(); isolated.clearLiveImages(); });
+      addTearDown(() {
+        isolated.clear();
+        isolated.clearLiveImages();
+      });
       final bundle = _RetryingAssetBundle();
       late BuildContext context;
-      await tester.pumpWidget(DefaultAssetBundle(bundle: bundle, child: MaterialApp(home: Builder(builder: (value) {
-        context = value;
-        return const SizedBox.shrink();
-      }))));
+      await tester.pumpWidget(
+        DefaultAssetBundle(
+          bundle: bundle,
+          child: MaterialApp(
+            home: Builder(
+              builder: (value) {
+                context = value;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        ),
+      );
       var errors = 0;
-      await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated,
-        onError: (_, _) { errors++; }));
+      await tester.runAsync(
+        () => $ImagesCache.precacheLandscape(
+          context,
+          width: 80,
+          imageCache: isolated,
+          onError: (_, _) {
+            errors++;
+          },
+        ),
+      );
       await tester.pump();
       final afterFailure = (isolated.currentSize, isolated.pendingImageCount);
       await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated));
@@ -602,32 +730,52 @@ void main() {
     });
 
     for (final useLookup in [false, true]) {
-    testWidgets('when using an isolated image cache with ${useLookup ? 'filename lookup' : 'a named accessor'}, it should survive global eviction and reuse the same decode', (tester) async {
-      final isolated = ImageCache();
-      addTearDown(() { isolated.clear(); isolated.clearLiveImages(); });
-      late BuildContext context;
-      await tester.pumpWidget(MaterialApp(home: Builder(builder: (value) {
-        context = value;
-        return const SizedBox.shrink();
-      })));
-      await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated));
-      await tester.pump();
-      imageCache.clear();
-      await tester.pumpWidget(MaterialApp(home: useLookup
-        ? $Images.findByName('landscape.png', width: 80, imageCache: isolated)
-        : $Images.landscape(width: 80, imageCache: isolated)));
-      await tester.pumpAndSettle();
-      final element = tester.element(find.byType(Image));
-      final provider = tester.widget<Image>(find.byType(Image)).image;
-      final status = await provider.obtainCacheStatus(configuration: createLocalImageConfiguration(element));
-      var synchronous = false;
-      final listener = ImageStreamListener((image, sync) { synchronous = sync; image.dispose(); });
-      provider.resolve(createLocalImageConfiguration(element))..addListener(listener)..removeListener(listener);
-      final before = (isolated.currentSize, imageCache.currentSize, status?.keepAlive, synchronous);
-      final removed = await $ImagesCache.removeLandscape(element, width: 80, imageCache: isolated);
-      expect((before, removed, isolated.currentSize), ((1, 0, true, true), true, 0));
-    });
-
+      testWidgets(
+        'when using an isolated image cache with ${useLookup ? 'filename lookup' : 'a named accessor'}, it should survive global eviction and reuse the same decode',
+        (tester) async {
+          final isolated = ImageCache();
+          addTearDown(() {
+            isolated.clear();
+            isolated.clearLiveImages();
+          });
+          late BuildContext context;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Builder(
+                builder: (value) {
+                  context = value;
+                  return const SizedBox.shrink();
+                },
+              ),
+            ),
+          );
+          await tester.runAsync(() => $ImagesCache.precacheLandscape(context, width: 80, imageCache: isolated));
+          await tester.pump();
+          imageCache.clear();
+          await tester.pumpWidget(
+            MaterialApp(
+              home: useLookup
+                  ? $Images.findByName('landscape.png', width: 80, imageCache: isolated)
+                  : $Images.landscape(width: 80, imageCache: isolated),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final element = tester.element(find.byType(Image));
+          final provider = tester.widget<Image>(find.byType(Image)).image;
+          final status = await provider.obtainCacheStatus(configuration: createLocalImageConfiguration(element));
+          var synchronous = false;
+          final listener = ImageStreamListener((image, sync) {
+            synchronous = sync;
+            image.dispose();
+          });
+          provider.resolve(createLocalImageConfiguration(element))
+            ..addListener(listener)
+            ..removeListener(listener);
+          final before = (isolated.currentSize, imageCache.currentSize, status?.keepAlive, synchronous);
+          final removed = await $ImagesCache.removeLandscape(element, width: 80, imageCache: isolated);
+          expect((before, removed, isolated.currentSize), ((1, 0, true, true), true, 0));
+        },
+      );
     }
 
     testWidgets('when precaching an image by width, it should remove the derived-size entry', (tester) async {
@@ -687,4 +835,62 @@ class _RetryingAssetBundle extends CachingAssetBundle {
     }
     return rootBundle.load(key);
   }
+}
+
+class _SvgPaintSamples {
+  static Future<void> waitForImages() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (imageCache.pendingImageCount > 0) {
+      if (DateTime.now().isAfter(deadline)) throw StateError('Embedded PNG decode timed out');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
+  static Future<List<List<int>>?> capture(
+    WidgetTester tester, {
+    required String name,
+    required List<(int, int)> samples,
+    double width = 100,
+  }) async {
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: $Icons.findByName(name, width: width),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(waitForImages);
+    await tester.pumpAndSettle();
+    final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    return tester.runAsync(() async {
+      final image = await boundary.toImage();
+      final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      final pixels = [
+        for (final (x, y) in samples)
+          [for (var channel = 0; channel < 4; channel++) bytes.getUint8((y * image.width + x) * 4 + channel)],
+      ];
+      image.dispose();
+      return pixels;
+    });
+  }
+}
+
+class _ChangingLocaleDelegate extends LocalizationsDelegate<String> {
+  const _ChangingLocaleDelegate(this.value);
+
+  final String value;
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<String> load(Locale locale) => Future.value(value);
+
+  @override
+  bool shouldReload(_ChangingLocaleDelegate old) => value != old.value;
 }

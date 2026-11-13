@@ -16,6 +16,7 @@ class GeneratedAssetSpec {
     this.requiresPathMetrics = false,
     this.requiresTypedData = false,
     this.requiresImageFilter = false,
+    this.requiresEmbeddedImages = false,
   });
 
   /// Source path relative to the consumer package.
@@ -50,4 +51,7 @@ class GeneratedAssetSpec {
 
   /// Whether generated shadows need the Flutter image-filter type.
   final bool requiresImageFilter;
+
+  /// Whether SVG patterns need the shared embedded PNG loader.
+  final bool requiresEmbeddedImages;
 }

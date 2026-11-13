@@ -1,0 +1,208 @@
+import 'dart:ui' as ui;
+
+import 'package:dotdart_generated_consumer_fixture/gen/icons.g.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  final binding = _PatternBinding();
+  final cache = binding.imageCache as _HeldImageCache;
+
+  setUp(() {
+    cache
+      ..hold = false
+      ..requests.clear()
+      ..clear()
+      ..clearLiveImages();
+  });
+
+  tearDown(() {
+    cache.hold = false;
+    for (var index = 0; index < cache.requests.length; index++) {
+      cache.requests[index].release();
+    }
+    cache
+      ..clear()
+      ..clearLiveImages();
+  });
+
+  testWidgets('when an embedded PNG is resizing, it should keep its decoded pixels visible', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final key = GlobalKey();
+    await _PatternFrame.mount(tester, key: key, width: 20);
+    await _PatternFrame.waitForImages(tester, cache);
+    cache.hold = true;
+    await _PatternFrame.mount(tester, key: key, width: 60);
+    await _PatternFrame.waitForRequest(tester, cache.requests.single);
+    final pixel = await _PatternFrame.pixel(tester, key: key, x: 15, y: 15);
+    expect(pixel, [255, 0, 0, 255]);
+  });
+
+  testWidgets('when sizes change during an active decode, it should keep only one request pending', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final key = GlobalKey();
+    await _PatternFrame.mount(tester, key: key, width: 20);
+    await _PatternFrame.waitForImages(tester, cache);
+    cache.hold = true;
+    for (final width in [40.0, 50.0, 60.0, 70.0, 80.0, 90.0]) {
+      await _PatternFrame.mount(tester, key: key, width: width);
+    }
+    expect((cache.requests.length, cache.pendingImageCount), (1, 1));
+  });
+
+  testWidgets('when a pending resize finishes, it should decode the newest exact size next', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final key = GlobalKey();
+    await _PatternFrame.mount(tester, key: key, width: 20);
+    await _PatternFrame.waitForImages(tester, cache);
+    cache.hold = true;
+    for (final width in [40.0, 50.0, 60.0, 70.0, 80.0, 90.0]) {
+      await _PatternFrame.mount(tester, key: key, width: width);
+    }
+    await _PatternFrame.waitForRequest(tester, cache.requests.single);
+    cache.requests.first.release();
+    await _PatternFrame.waitForRequest(tester, cache.requests.last);
+    cache.requests.last.release();
+    await tester.pumpAndSettle();
+    expect(cache.requests.map((request) => request.width).toList(), [40, 90]);
+  });
+
+  testWidgets('when removing a widget with a pending resize, it should release its image listener', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final key = GlobalKey();
+    await _PatternFrame.mount(tester, key: key, width: 20);
+    await _PatternFrame.waitForImages(tester, cache);
+    cache.hold = true;
+    await _PatternFrame.mount(tester, key: key, width: 60);
+    await _PatternFrame.waitForRequest(tester, cache.requests.single);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    cache.requests.single.release();
+    await tester.pumpAndSettle();
+    expect((cache.pendingImageCount, cache.liveImageCount, tester.takeException()), (0, 0, null));
+  });
+}
+
+class _PatternBinding extends AutomatedTestWidgetsFlutterBinding {
+  @override
+  ImageCache createImageCache() => _HeldImageCache();
+}
+
+class _HeldImageCache extends ImageCache {
+  bool hold = false;
+  final requests = <_HeldImageStreamCompleter>[];
+
+  @override
+  ImageStreamCompleter? putIfAbsent(Object key, ImageStreamCompleter Function() loader, {ImageErrorListener? onError}) {
+    return super.putIfAbsent(key, () {
+      final original = loader();
+      if (!hold || key is! ResizeImageKey) return original;
+      final held = _HeldImageStreamCompleter(original);
+      requests.add(held);
+      return held;
+    }, onError: onError);
+  }
+}
+
+class _HeldImageStreamCompleter extends ImageStreamCompleter {
+  _HeldImageStreamCompleter(ImageStreamCompleter original) {
+    late ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (image, _) {
+        original.removeListener(listener);
+        if (_disposed) {
+          image.dispose();
+          return;
+        }
+        width = image.image.width;
+        _image = image;
+        if (_released) _deliver();
+      },
+      onError: (error, stack) {
+        original.removeListener(listener);
+        if (_disposed) return;
+        reportError(exception: error, stack: stack);
+      },
+    );
+    original.addListener(listener);
+  }
+
+  ImageInfo? _image;
+  bool _released = false;
+  bool _disposed = false;
+  int? width;
+
+  bool get ready => width != null;
+
+  @override
+  void onDisposed() {
+    _disposed = true;
+    _image?.dispose();
+    _image = null;
+    super.onDisposed();
+  }
+
+  void release() {
+    _released = true;
+    _deliver();
+  }
+
+  void _deliver() {
+    final image = _image;
+    if (image == null) return;
+    _image = null;
+    setImage(image);
+  }
+}
+
+class _PatternFrame {
+  static Future<void> waitForRequest(WidgetTester tester, _HeldImageStreamCompleter request) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (!request.ready) {
+      if (DateTime.now().isAfter(deadline)) throw StateError('Held image decode timed out.');
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
+  }
+
+  static Future<void> mount(WidgetTester tester, {required GlobalKey key, required double width}) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: $Icons.maskedArc(width: width),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  static Future<void> waitForImages(WidgetTester tester, ImageCache cache) async {
+    await tester.runAsync(() async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (cache.pendingImageCount > 0) {
+        if (DateTime.now().isAfter(deadline)) throw StateError('Pattern image decode timed out.');
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+  }
+
+  static Future<List<int>?> pixel(WidgetTester tester, {required GlobalKey key, required int x, required int y}) async {
+    final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    return tester.runAsync(() async {
+      final image = await boundary.toImage();
+      final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      final pixel = [for (var channel = 0; channel < 4; channel++) bytes.getUint8((y * image.width + x) * 4 + channel)];
+      image.dispose();
+      return pixel;
+    });
+  }
+}

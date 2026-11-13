@@ -5,6 +5,7 @@
 import '../models/svg_document.dart';
 import '../models/svg_element.dart';
 import '../models/svg_style.dart';
+import '../parsers/svg/svg_path_bounds.dart';
 import 'accessor_param.dart';
 import 'naming.dart';
 
@@ -17,10 +18,18 @@ class SvgGenerator {
 
   final SvgDocument document;
   final String sourcePath;
+  final Map<SvgElement, String> _geometryFields = {};
+  final Map<SvgGroup, String> _maskedPatternFields = {};
+  late final Map<SvgElement, SvgMatrix> _patternTransforms = _buildPatternTransforms();
+
+  /// Whether generated widgets decode embedded PNG patterns.
+  bool get requiresEmbeddedImages => document.patterns.isNotEmpty;
 
   /// Whether generated matrix fields require Dart typed data.
   bool get requiresTypedData =>
-      _containsMatrix(document.children) || document.clipPaths.values.any((clip) => _containsMatrix(clip.children));
+      requiresEmbeddedImages ||
+      _containsMatrix(document.children) ||
+      document.clipPaths.values.any((clip) => _containsMatrix(clip.children));
 
   bool _containsMatrix(List<SvgElement> elements) => elements.any(
     (element) =>
@@ -89,6 +98,8 @@ class SvgGenerator {
   /// formats the combined file.
   String generateWidgetClass() {
     final b = StringBuffer();
+    _geometryFields.clear();
+    _maskedPatternFields.clear();
     final colorPlan = _buildColorPlan();
     _writeWidgetClass(b, colorPlan.colors);
     _writePainterClass(b, colorPlan);
@@ -237,16 +248,39 @@ class SvgGenerator {
     b.writeln('  @override');
     b.writeln('  Widget buildPainter({required double width, required double height}) {');
     final painterName = _baseName;
-    b.writeln('    return SizedBox.fromSize(');
+    if (requiresEmbeddedImages) {
+      b.writeln('    return Builder(builder: (context) {');
+      b.writeln('      final ratio = MediaQuery.devicePixelRatioOf(context);');
+      b.writeln('      return _DotdartSvgImages(patterns: _${painterName}Painter._patternDefinitions, providers: [');
+      var index = 0;
+      for (final entry in document.patterns.entries) {
+        final pattern = entry.value;
+        final twoAxis = _patternNeedsTwoAxisSizing(entry.key);
+        final width = twoAxis
+            ? '_${painterName}Painter._decodeWidth$index(scaleX: width / _viewBoxWidth, scaleY: height / _viewBoxHeight)'
+            : 'width / _viewBoxWidth * _${painterName}Painter._decodeWidth$index';
+        final height = twoAxis
+            ? '_${painterName}Painter._decodeHeight$index(scaleX: width / _viewBoxWidth, scaleY: height / _viewBoxHeight)'
+            : 'height / _viewBoxHeight * _${painterName}Painter._decodeHeight$index';
+        b.writeln(
+          '        ResizeImage(_${painterName}Painter._image$index, width: math.min(${pattern.pixelWidth}, math.max(1, ($width * ratio).ceil())), height: math.min(${pattern.pixelHeight}, math.max(1, ($height * ratio).ceil()))),',
+        );
+        index++;
+      }
+      b.writeln('      ], builder: (images) => SizedBox.fromSize(');
+    } else {
+      b.writeln('    return SizedBox.fromSize(');
+    }
     b.writeln('      size: Size(width, height),');
     b.writeln('      child: RepaintBoundary(');
     b.writeln('        child: CustomPaint(');
-    if (colors.isNotEmpty) {
+    if (colors.isNotEmpty || requiresEmbeddedImages) {
       b.writeln('          painter: _$painterName' + 'Painter(');
       for (final color in colors) {
         final hex = _colorToHex(color.r, color.g, color.b, color.a);
         b.writeln('            ${color.name}: ${color.name} ?? const Color($hex),');
       }
+      if (requiresEmbeddedImages) b.writeln('            images: images,');
       b.writeln('          ),');
     } else {
       b.writeln('          painter: _$painterName' + 'Painter(),');
@@ -254,7 +288,7 @@ class SvgGenerator {
     b.writeln('          size: Size(width, height),');
     b.writeln('        ),');
     b.writeln('      ),');
-    b.writeln('    );');
+    b.writeln(requiresEmbeddedImages ? '    ));});' : '    );');
     b.writeln('  }');
     b.writeln('}');
     b.writeln();
@@ -270,8 +304,9 @@ class SvgGenerator {
     final colors = colorPlan.colors;
 
     b.writeln('class _$name' + 'Painter extends CustomPainter {');
-    if (colors.isNotEmpty) {
+    if (colors.isNotEmpty || requiresEmbeddedImages) {
       b.writeln('  _$name' + 'Painter({');
+      if (requiresEmbeddedImages) b.writeln('    required this.images,');
       for (final color in colors) {
         b.writeln('    required this.${color.name},');
       }
@@ -284,12 +319,13 @@ class SvgGenerator {
     for (final color in colors) {
       b.writeln('  final Color ${color.name};');
     }
+    if (requiresEmbeddedImages) b.writeln('  final List<_DotdartSvgDecodedImage?> images;');
     if (colors.isNotEmpty) b.writeln();
     if (_usesFill(document.children)) {
-      b.writeln('  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;');
+      b.writeln('  static final Paint _fillPaint = Paint()..style = PaintingStyle.fill;');
     }
     if (_usesStroke(document.children)) {
-      b.writeln('  final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;');
+      b.writeln('  static final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;');
     }
     b.writeln();
 
@@ -305,7 +341,7 @@ class SvgGenerator {
     var ellipseRectIdx = 0;
     var lineIdx = 0;
     var polyIdx = 0;
-    final geometryFieldByElement = <SvgElement, String>{};
+    final geometryFieldByElement = _geometryFields;
 
     void emitGeometry(List<SvgElement> elements) {
       for (final element in elements) {
@@ -369,6 +405,9 @@ class SvgGenerator {
       clipIdx++;
     }
 
+    _emitMaskedPatternFields(b, document.children, clipPathFieldNames);
+    _emitPaintServerFields(b);
+
     // ── Paint method ──
 
     final widgetName = widgetClassName;
@@ -400,8 +439,11 @@ class SvgGenerator {
 
     b.writeln('  @override');
     b.writeln('  bool shouldRepaint(covariant _$name' + 'Painter oldDelegate) {');
-    if (colors.isNotEmpty) {
+    if (colors.isNotEmpty || requiresEmbeddedImages) {
       b.writeln('    return');
+      if (requiresEmbeddedImages) {
+        b.writeln('        !identical(images, oldDelegate.images) ${colors.isEmpty ? '' : '||'}');
+      }
       for (var i = 0; i < colors.length; i++) {
         final color = colors[i];
         if (i > 0) b.writeln('        ||');
@@ -510,7 +552,11 @@ class SvgGenerator {
     final hasTransform = transform != null && transform.isNotEmpty;
     final clipField = clipPathFieldNames[element.style.clipPathId];
     final hasClip = clipField != null;
-    if (hasTransform || hasClip || element.style.filterId != null) b.writeln('    canvas.save();');
+    final maskField = clipPathFieldNames[element.style.maskId];
+    final maskedPatternField = element is SvgGroup ? _maskedPatternFields[element] : null;
+    final hasScope =
+        hasTransform || hasClip || element.style.filterId != null || (maskField != null && maskedPatternField == null);
+    if (hasScope) b.writeln('    canvas.save();');
     final matrixField = transformFields[element];
     if (matrixField != null) {
       b.writeln('    canvas.transform($matrixField);');
@@ -520,13 +566,87 @@ class SvgGenerator {
     if (hasClip) {
       b.writeln('    canvas.clipPath($clipField);');
     }
+    if (maskedPatternField != null) {
+      final child = (element as SvgGroup).children.single;
+      final index = document.patterns.keys.toList().indexOf(child.style.fillServerId!);
+      final opacity = _fmt(child.style.fillOpacity * child.style.opacity);
+      b.writeln(
+        '    if (images[$index]?.shaderPaint(${_patternField(index: index, element: child)}) case final maskedPaint?) {',
+      );
+      b.writeln(
+        '      canvas.drawPath($maskedPatternField, maskedPaint..color = const Color.from(alpha: $opacity, red: 1, green: 1, blue: 1));',
+      );
+      b.writeln('    } else {');
+      if (!hasScope) b.writeln('      canvas.save();');
+    }
+    if (maskField != null) {
+      final region = document.maskRegions[element.style.maskId]!;
+      b.writeln(
+        '    canvas.clipRect(const Rect.fromLTWH(${_literal(region.$1)}, ${_literal(region.$2)}, ${_literal(region.$3)}, ${_literal(region.$4)}));',
+      );
+      b.writeln('    canvas.clipPath($maskField);');
+    }
+    final serverId = element.style.fillServerId;
+    if (serverId != null && element is! SvgGroup && element.style.opacity > 0 && element.style.fillOpacity > 0) {
+      _emitServerDraw(b, element, serverId);
+    }
     final filterId = element.style.filterId;
     if (filterId != null) {
       _emitShadow(b, filterId, emitDraw);
     } else {
       emitDraw();
     }
-    if (hasTransform || hasClip || element.style.filterId != null) b.writeln('    canvas.restore();');
+    if (maskedPatternField != null) {
+      if (!hasScope) b.writeln('      canvas.restore();');
+      b.writeln('    }');
+    }
+    if (hasScope) b.writeln('    canvas.restore();');
+  }
+
+  SvgElement? _maskedPatternChild(SvgGroup group) {
+    if (group.style.maskId == null || group.style.filterId != null || group.children.length != 1) return null;
+    final child = group.children.single;
+    if (child is! SvgPath && child is! SvgRect) return null;
+    if ((child.transform?.isNotEmpty ?? false) ||
+        child.style.clipPathId != null ||
+        child.style.filterId != null ||
+        child.style.maskId != null ||
+        child.style.strokeColor != null ||
+        !document.patterns.containsKey(child.style.fillServerId) ||
+        child.style.fillOpacity <= 0 ||
+        child.style.opacity <= 0) {
+      return null;
+    }
+    return child;
+  }
+
+  void _emitMaskedPatternFields(StringBuffer b, List<SvgElement> elements, Map<String, String> clipFields) {
+    for (final element in elements) {
+      if (element is! SvgGroup) continue;
+      final child = _maskedPatternChild(element);
+      final mask = element.style.maskId;
+      final clip = clipFields[mask];
+      final region = document.maskRegions[mask];
+      if (child != null && clip != null && region != null) {
+        final field = '_maskedPattern${_maskedPatternFields.length}';
+        _maskedPatternFields[element] = field;
+        final target = switch (child) {
+          SvgPath() => _geometryFields[child]!,
+          SvgRect(:final rx, :final ry) =>
+            '(Path()..${rx > 0 || ry > 0 ? 'addRRect' : 'addRect'}(${_geometryFields[child]}))',
+          SvgCircle() ||
+          SvgEllipse() ||
+          SvgLine() ||
+          SvgPolyline() ||
+          SvgPolygon() ||
+          SvgGroup() => throw StateError('Unsupported masked pattern geometry.'),
+        };
+        b.writeln(
+          '  static final Path $field = Path.combine(PathOperation.intersect, Path.combine(PathOperation.intersect, $clip, $target), Path()..addRect(const Rect.fromLTWH(${_literal(region.$1)}, ${_literal(region.$2)}, ${_literal(region.$3)}, ${_literal(region.$4)})));',
+        );
+      }
+      _emitMaskedPatternFields(b, element.children, clipFields);
+    }
   }
 
   void _emitShadowFields(StringBuffer b) {
@@ -759,6 +879,8 @@ class SvgGenerator {
           b.writeln('    ..cubicTo(${_fmt(x1)}, ${_fmt(y1)}, ${_fmt(x2)}, ${_fmt(y2)}, ${_fmt(x)}, ${_fmt(y)})');
         case SvgQuadTo(:final x1, :final y1, :final x, :final y):
           b.writeln('    ..quadraticBezierTo(${_fmt(x1)}, ${_fmt(y1)}, ${_fmt(x)}, ${_fmt(y)})');
+        case SvgArcTo():
+          b.writeln('    ..${_arcCall(cmd)}');
         case SvgClosePath():
           b.writeln('    ..close()');
       }
@@ -914,6 +1036,8 @@ class SvgGenerator {
                 );
               case SvgQuadTo(:final x1, :final y1, :final x, :final y):
                 b.writeln('${cascadePrefix}quadraticBezierTo(${_fmt(x1)}, ${_fmt(y1)}, ${_fmt(x)}, ${_fmt(y)})');
+              case SvgArcTo():
+                b.writeln('$cascadePrefix${_arcCall(cmd)}');
               case SvgClosePath():
                 b.writeln('${cascadePrefix}close()');
             }
@@ -962,6 +1086,205 @@ class SvgGenerator {
           _emitClipPathShapes(b, children, cascadePrefix: cascadePrefix, argumentIndent: argumentIndent);
       }
     }
+  }
+
+  String _literal(double value) =>
+      value == value.roundToDouble() && value.abs() < 1e10 ? value.toInt().toString() : value.toString();
+
+  String _patternField({required int index, required SvgElement element}) =>
+      '_pattern${index}Geometry${_geometryFields.keys.toList().indexOf(element)}';
+
+  String _alignmentLiteral({required double x, required double y}) {
+    final name = switch ((x, y)) {
+      (-1, -1) => 'topLeft',
+      (0, -1) => 'topCenter',
+      (1, -1) => 'topRight',
+      (-1, 0) => 'centerLeft',
+      (0, 0) => 'center',
+      (1, 0) => 'centerRight',
+      (-1, 1) => 'bottomLeft',
+      (0, 1) => 'bottomCenter',
+      (1, 1) => 'bottomRight',
+      _ => null,
+    };
+    return name == null ? 'Alignment(${_literal(x)}, ${_literal(y)})' : 'Alignment.$name';
+  }
+
+  String _arcCall(SvgArcTo arc) =>
+      'arcToPoint(const Offset(${_literal(arc.x)}, ${_literal(arc.y)}), radius: const Radius.elliptical(${_literal(arc.rx)}, ${_literal(arc.ry)}), rotation: ${_literal(arc.rotation)}, largeArc: ${arc.largeArc}, clockwise: ${arc.clockwise})';
+
+  String _boundsExpression(SvgElement element, {bool exactPathBounds = false}) {
+    if (exactPathBounds &&
+        element is SvgPath &&
+        element.commands.any((command) => command is SvgCubicTo || command is SvgQuadTo || command is SvgArcTo)) {
+      final bounds = SvgPathBounds.calculate(element);
+      return 'const Rect.fromLTWH(${_literal(bounds.left)}, ${_literal(bounds.top)}, ${_literal(bounds.width)}, ${_literal(bounds.height)})';
+    }
+    final field = _geometryFields[element]!;
+    return switch (element) {
+      SvgPath() || SvgPolygon() || SvgPolyline() || SvgLine() => '$field.getBounds()',
+      SvgRect(:final rx, :final ry) => rx > 0 || ry > 0 ? '$field.outerRect' : field,
+      SvgCircle() || SvgEllipse() => field,
+      SvgGroup() => throw StateError('Groups do not own geometry.'),
+    };
+  }
+
+  void _emitPaintServerFields(StringBuffer b) {
+    var index = 0;
+    for (final gradient in document.gradients.values) {
+      final colors = gradient.colors
+          .map((color) => 'Color(${_colorToHex(color.$1, color.$2, color.$3, color.$4)})')
+          .join(', ');
+      if (gradient.colors.length == 1 || (gradient.x1 == gradient.x2 && gradient.y1 == gradient.y2)) {
+        final color = gradient.colors.last;
+        b.writeln(
+          '  static final Paint _gradient$index = Paint()..color = const Color(${_colorToHex(color.$1, color.$2, color.$3, color.$4)});',
+        );
+      } else {
+        b.writeln(
+          '  static final Paint _gradient$index = Paint()..shader = const LinearGradient(begin: ${_alignmentLiteral(x: gradient.x1, y: gradient.y1)}, end: ${_alignmentLiteral(x: gradient.x2, y: gradient.y2)}, colors: [$colors], stops: ${gradient.stops}).createShader(const Rect.fromLTRB(-1, -1, 1, 1));',
+        );
+      }
+      index++;
+    }
+    index = 0;
+    for (final entry in document.patterns.entries) {
+      final pattern = entry.value;
+      b.writeln('  static final MemoryImage _image$index = MemoryImage(Uint8List.fromList(${pattern.bytes}));');
+      final usages = _geometryFields.keys.where((element) => element.style.fillServerId == entry.key).toList();
+      final twoAxis = _patternNeedsTwoAxisSizing(entry.key);
+      final widths = <String>[];
+      final heights = <String>[];
+      for (final element in usages) {
+        final tileField = _patternField(index: index, element: element);
+        b.writeln(
+          '  static final $tileField = _DotdartSvgPattern(bounds: ${_boundsExpression(element, exactPathBounds: pattern.objectBoundingBox)}, objectBoundingBox: ${pattern.objectBoundingBox}, x: ${_literal(pattern.x)}, y: ${_literal(pattern.y)}, width: ${_literal(pattern.width)}, height: ${_literal(pattern.height)}, imageX: ${_literal(pattern.imageX)}, imageY: ${_literal(pattern.imageY)}, imageWidth: ${_literal(pattern.imageWidth)}, imageHeight: ${_literal(pattern.imageHeight)});',
+        );
+        final matrix = _patternTransforms[element]!;
+        widths.add(
+          twoAxis
+              ? _patternAxisLength(extent: '$tileField.imageWidth', x: matrix.a, y: matrix.b)
+              : '$tileField.imageWidth * ${_literal(matrix.a.abs())}',
+        );
+        heights.add(
+          twoAxis
+              ? _patternAxisLength(extent: '$tileField.imageHeight', x: matrix.c, y: matrix.d)
+              : '$tileField.imageHeight * ${_literal(matrix.d.abs())}',
+        );
+      }
+      final width = widths.isEmpty ? '1.0' : widths.reduce((a, b) => 'math.max($a, $b)');
+      final height = heights.isEmpty ? '1.0' : heights.reduce((a, b) => 'math.max($a, $b)');
+      if (twoAxis) {
+        b.writeln('  static double _decodeWidth$index({required double scaleX, required double scaleY}) => $width;');
+        b.writeln('  static double _decodeHeight$index({required double scaleX, required double scaleY}) => $height;');
+      } else {
+        b.writeln('  static final double _decodeWidth$index = $width;');
+        b.writeln('  static final double _decodeHeight$index = $height;');
+      }
+      index++;
+    }
+    if (document.patterns.isNotEmpty) {
+      b.writeln('  static final List<List<_DotdartSvgPattern>> _patternDefinitions = [');
+      var patternIndex = 0;
+      for (final id in document.patterns.keys) {
+        final names = _geometryFields.keys
+            .where((element) => element.style.fillServerId == id)
+            .map((element) => _patternField(index: patternIndex, element: element));
+        b.writeln('    [${names.join(', ')}],');
+        patternIndex++;
+      }
+      b.writeln('  ];');
+    }
+    if (document.patterns.isNotEmpty) {
+      b.writeln('  static final Paint _patternPaint = Paint()..filterQuality = FilterQuality.low;');
+    }
+  }
+
+  Map<SvgElement, SvgMatrix> _buildPatternTransforms() {
+    final result = <SvgElement, SvgMatrix>{};
+    void visit(List<SvgElement> elements, SvgMatrix parent) {
+      for (final element in elements) {
+        final transforms = element.transform;
+        final matrix = transforms == null || transforms.isEmpty ? parent : SvgMatrix.compose([parent, ...transforms]);
+        if (element is SvgGroup) {
+          visit(element.children, matrix);
+        } else if (document.patterns.containsKey(element.style.fillServerId)) {
+          result[element] = matrix;
+        }
+      }
+    }
+
+    visit(document.children, const SvgMatrix(a: 1, b: 0, c: 0, d: 1, e: 0, f: 0));
+    return result;
+  }
+
+  bool _patternNeedsTwoAxisSizing(String id) => _patternTransforms.entries.any(
+    (entry) => entry.key.style.fillServerId == id && (entry.value.b != 0 || entry.value.c != 0),
+  );
+
+  String _patternAxisLength({required String extent, required double x, required double y}) {
+    if (x == 0 && y == 0) return '0.0';
+    if (y == 0) return '$extent * ${_literal(x.abs())} * scaleX';
+    if (x == 0) return '$extent * ${_literal(y.abs())} * scaleY';
+    final horizontal = x == 1 ? 'scaleX' : 'scaleX * ${_literal(x)}';
+    final vertical = y == 1 ? 'scaleY' : 'scaleY * ${_literal(y)}';
+    return '$extent * math.sqrt(($horizontal) * ($horizontal) + ($vertical) * ($vertical))';
+  }
+
+  void _emitServerDraw(StringBuffer b, SvgElement element, String id) {
+    final field = _geometryFields[element]!;
+    final opacity = _fmt(element.style.fillOpacity * element.style.opacity);
+    if (document.gradients.containsKey(id)) {
+      final index = document.gradients.keys.toList().indexOf(id);
+      final paint = '(_gradient$index..color = const Color.from(alpha: $opacity, red: 1, green: 1, blue: 1))';
+      final gradient = document.gradients[id]!;
+      final actualPaint = gradient.colors.length == 1 || (gradient.x1 == gradient.x2 && gradient.y1 == gradient.y2)
+          ? '(_gradient$index..color = const Color(${_colorToHex(gradient.colors.last.$1, gradient.colors.last.$2, gradient.colors.last.$3, gradient.colors.last.$4 * element.style.fillOpacity * element.style.opacity)}))'
+          : paint;
+      final method = switch (element) {
+        SvgRect(:final rx, :final ry) => rx > 0 || ry > 0 ? 'drawRRect' : 'drawRect',
+        SvgCircle() || SvgEllipse() => 'drawOval',
+        SvgPath() || SvgPolygon() || SvgPolyline() || SvgLine() => 'drawPath',
+        SvgGroup() => throw StateError('Groups do not own geometry.'),
+      };
+      b.writeln('    canvas.$method($field, $actualPaint);');
+      return;
+    }
+    final index = document.patterns.keys.toList().indexOf(id);
+    final drawMethod = switch (element) {
+      SvgRect(:final rx, :final ry) => rx > 0 || ry > 0 ? 'drawRRect' : 'drawRect',
+      SvgCircle() || SvgEllipse() => 'drawOval',
+      SvgPath() || SvgPolygon() || SvgPolyline() || SvgLine() => 'drawPath',
+      SvgGroup() => throw StateError('Groups do not own geometry.'),
+    };
+    b.writeln(
+      '    if (images[$index]?.shaderPaint(${_patternField(index: index, element: element)}) case final patternPaint?) {',
+    );
+    b.writeln(
+      '      canvas.$drawMethod($field, patternPaint..color = const Color.from(alpha: $opacity, red: 1, green: 1, blue: 1));',
+    );
+    b.writeln('    } else {');
+    b.writeln('    canvas.save();');
+    switch (element) {
+      case SvgRect(:final rx, :final ry):
+        b.writeln(rx > 0 || ry > 0 ? '    canvas.clipRRect($field);' : '    canvas.clipRect($field);');
+      case SvgCircle():
+      case SvgEllipse():
+        // Cache the oval clip alongside the tile, never allocate it during paint.
+        b.writeln('    canvas.clipPath(${_patternField(index: index, element: element)}.ovalClip);');
+      case SvgPath():
+      case SvgPolygon():
+      case SvgPolyline():
+      case SvgLine():
+        b.writeln('    canvas.clipPath($field);');
+      case SvgGroup():
+        throw StateError('Groups do not own geometry.');
+    }
+    b.writeln(
+      '    ${_patternField(index: index, element: element)}.paint(canvas, images[$index], _patternPaint..color = const Color.from(alpha: $opacity, red: 1, green: 1, blue: 1));',
+    );
+    b.writeln('    canvas.restore();');
+    b.writeln('    }');
   }
 
   // ── Format helpers ──
