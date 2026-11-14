@@ -1,5 +1,7 @@
 ## 0.12.1
 
+- Support `build` 5 and the latest `build_runner`, while retaining `build` 4
+  compatibility.
 - Added centered SVG radial gradient fills with numeric user coordinates and
   `gradientTransform` support for scale, rotation, skew, and matrices.
   Shaders, transforms, stop colors, and opacity paints are cached, with no
