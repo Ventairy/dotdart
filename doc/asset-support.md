@@ -17,6 +17,9 @@ Supported:
 - `defs`, `clipPath`, and `clip-path="url(#id)"`
 - linear gradient fills with `gradientUnits="userSpaceOnUse"`, numeric
   coordinates, and the default `spreadMethod="pad"`
+- centered radial gradient fills with `gradientUnits="userSpaceOnUse"`,
+  explicit numeric `cx`, `cy`, and `r`, and the default `spreadMethod="pad"`;
+  `gradientTransform` supports the same transforms as drawable shapes
 - elliptical arc path commands (`A` and `a`)
 - embedded PNG image patterns with matching `patternUnits` and
   `patternContentUnits`; a pattern can contain one image or a local `use`
@@ -27,8 +30,9 @@ Supported:
 
 Not supported:
 
-- radial gradients, gradients in bounding-box coordinates, transformed
-  gradients, gradient or pattern strokes, arbitrary filters, or text
+- gradients in bounding-box coordinates, radial gradients with an off-center
+  focal point or nonzero focal radius, transformed linear gradients,
+  gradient or pattern strokes, arbitrary filters, or text
 - general masks, vector patterns, external images, or directly drawn images
 - gradients, patterns, or masks combined with drop shadows
 - CSS `style` blocks
@@ -57,9 +61,15 @@ generated Dartdoc records the original SVG ID.
 
 ### SVG gradients and embedded PNG patterns
 
-Linear gradients and arcs become cached Flutter drawing data. Gradient stop
+Supported gradients and arcs become cached Flutter drawing data. Gradient stop
 colors keep their source values; only solid fills and strokes expose widget
 color parameters.
+
+Radial gradients can use nonuniform scale, rotation, and skew to produce
+elliptical fills. Their transform is calculated during generation. Shaders and
+paints are reused between frames and widget instances. A zero radius or single
+stop becomes a solid paint. If provided, `fx` and `fy` must equal `cx` and `cy`,
+and `fr` must be zero. Percentage coordinates are not supported.
 
 For image patterns, use an embedded base64 PNG and `preserveAspectRatio="none"`
 on the image. Both coordinate systems must match: `userSpaceOnUse` for numeric

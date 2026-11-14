@@ -1,3 +1,15 @@
+## 0.12.1
+
+- Added centered SVG radial gradient fills with numeric user coordinates and
+  `gradientTransform` support for scale, rotation, skew, and matrices.
+  Shaders, transforms, stop colors, and opacity paints are cached, with no
+  runtime SVG parsing or offscreen layers.
+- Compile eligible rectangular radial-fill paths to shared rectangles and
+  native rectangle drawing calls. Zero-radius and single-stop radial fills
+  become solid paints.
+- Limit transparent radial fills on those paths to their visible bounds,
+  reducing transparent overdraw without adding clips or compositing layers.
+
 ## 0.12.0
 
 - **BREAKING:** Requires Flutter 3.50 and Dart 3.14 for generation and generated

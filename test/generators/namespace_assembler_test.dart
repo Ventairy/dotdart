@@ -6,6 +6,26 @@ import 'package:dotdart/src/generators/naming.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final requiresRadialGradient in [false, true]) {
+    test('when radial shaders are $requiresRadialGradient, it should import their constructor only when needed', () {
+      final source = NamespaceAssembler(
+        namespaceName: 'Icons',
+        folderSegment: 'icons',
+        assets: [
+          GeneratedAssetSpec(
+            sourcePath: 'assets/icons/icon.svg',
+            accessorName: 'icon',
+            widgetClassName: '_Icon',
+            params: [const AccessorParam(name: 'key', type: 'Key?')],
+            widgetSource: 'class _Icon {}',
+            assetType: DotdartAssetType.svg,
+            requiresRadialGradient: requiresRadialGradient,
+          ),
+        ],
+      ).assemble();
+      expect(source.contains("import 'dart:ui' as ui show Gradient;"), requiresRadialGradient);
+    });
+  }
   for (final requiresTypedData in [false, true]) {
     test('when typed data is $requiresTypedData, it should emit only the required import', () {
       final source = NamespaceAssembler(

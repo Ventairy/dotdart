@@ -77,6 +77,9 @@ class NamespaceAssembler {
     if (assets.any((asset) => asset.requiresImageFilter)) {
       b.writeln("import 'dart:ui' show ImageFilter;");
     }
+    if (assets.any((asset) => asset.requiresRadialGradient)) {
+      b.writeln("import 'dart:ui' as ui show Gradient;");
+    }
     if (assets.any((asset) => asset.requiresPathMetrics)) {
       b.writeln("import 'dart:ui' show PathMetric;");
     }

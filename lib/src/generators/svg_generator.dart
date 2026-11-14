@@ -2,6 +2,8 @@
 // makes the code harder to read. This is a known false positive.
 // ignore_for_file: cascade_invocations, prefer_adjacent_string_concatenation
 
+import 'dart:math' as math;
+
 import '../models/svg_document.dart';
 import '../models/svg_element.dart';
 import '../models/svg_style.dart';
@@ -20,6 +22,9 @@ class SvgGenerator {
   final String sourcePath;
   final Map<SvgElement, String> _geometryFields = {};
   final Map<SvgGroup, String> _maskedPatternFields = {};
+  final Set<SvgPath> _radialRectPaths = {};
+  final Map<(String, double), String> _radialPaints = {};
+  late final Map<String, Set<double>> _radialOpacities = _buildRadialOpacities();
   late final Map<SvgElement, SvgMatrix> _patternTransforms = _buildPatternTransforms();
 
   /// Whether generated widgets decode embedded PNG patterns.
@@ -28,6 +33,9 @@ class SvgGenerator {
   /// Whether generated matrix fields require Dart typed data.
   bool get requiresTypedData =>
       requiresEmbeddedImages ||
+      document.radialGradients.entries.any(
+        (entry) => _radialOpacities.containsKey(entry.key) && !entry.value.isSolid && entry.value.transform != null,
+      ) ||
       _containsMatrix(document.children) ||
       document.clipPaths.values.any((clip) => _containsMatrix(clip.children));
 
@@ -39,6 +47,11 @@ class SvgGenerator {
 
   /// Whether the compiled shadows use Flutter image filters.
   bool get requiresImageFilter => document.dropShadows.isNotEmpty;
+
+  /// Whether centered radial fills need Flutter's native shader constructor.
+  bool get requiresRadialGradient => document.radialGradients.entries.any(
+    (entry) => _radialOpacities.containsKey(entry.key) && !entry.value.isSolid,
+  );
 
   String _matrixLiteral(List<SvgTransformOp> transforms) {
     final matrix = SvgMatrix.compose(transforms);
@@ -100,6 +113,8 @@ class SvgGenerator {
     final b = StringBuffer();
     _geometryFields.clear();
     _maskedPatternFields.clear();
+    _radialRectPaths.clear();
+    _radialPaints.clear();
     final colorPlan = _buildColorPlan();
     _writeWidgetClass(b, colorPlan.colors);
     _writePainterClass(b, colorPlan);
@@ -342,11 +357,25 @@ class SvgGenerator {
     var lineIdx = 0;
     var polyIdx = 0;
     final geometryFieldByElement = _geometryFields;
+    final radialRects = <(double, double, double, double), String>{};
 
     void emitGeometry(List<SvgElement> elements) {
       for (final element in elements) {
         switch (element) {
           case final SvgPath element:
+            final rect = _radialRect(element);
+            if (rect != null) {
+              final field = radialRects.putIfAbsent(rect, () {
+                final name = '_radialRect${radialRects.length}';
+                b.writeln(
+                  '  static const Rect $name = Rect.fromLTRB(${_literal(rect.$1)}, ${_literal(rect.$2)}, ${_literal(rect.$3)}, ${_literal(rect.$4)});',
+                );
+                return name;
+              });
+              geometryFieldByElement[element] = field;
+              _radialRectPaths.add(element);
+              continue;
+            }
             final SvgPath(:commands, :style) = element;
             _emitPathField(b, pathIdx, commands, style.fillRule);
             geometryFieldByElement[element] = '__path$pathIdx';
@@ -1147,6 +1176,7 @@ class SvgGenerator {
       }
       index++;
     }
+    _emitRadialPaintFields(b);
     index = 0;
     for (final entry in document.patterns.entries) {
       final pattern = entry.value;
@@ -1200,6 +1230,118 @@ class SvgGenerator {
     }
   }
 
+  void _emitRadialPaintFields(StringBuffer b) {
+    var index = 0;
+    for (final entry in document.radialGradients.entries) {
+      final gradient = entry.value;
+      final opacities = _radialOpacities[entry.key];
+      if (opacities == null) continue;
+      if (!gradient.isSolid) {
+        final colors = gradient.colors.map((color) => _radialColor(color, opacity: 1)).join(', ');
+        final matrix = gradient.transform;
+        final transform = matrix == null ? '' : ', TileMode.clamp, ${_matrixLiteral([matrix])}';
+        final center = gradient.cx == 0 && gradient.cy == 0
+            ? 'Offset.zero'
+            : 'const Offset(${_literal(gradient.cx)}, ${_literal(gradient.cy)})';
+        b.writeln(
+          '  static final _radialShader$index = ui.Gradient.radial($center, ${_literal(gradient.radius)}, const [$colors], const ${gradient.stops}$transform);',
+        );
+      }
+      var paintIndex = 0;
+      for (final opacity in opacities) {
+        final field = '_radialGradient${index}Paint$paintIndex';
+        _radialPaints[(entry.key, opacity)] = field;
+        final color = gradient.isSolid
+            ? _radialColor(gradient.colors.last, opacity: opacity)
+            : 'Color.from(alpha: ${_literal(opacity)}, red: 1, green: 1, blue: 1)';
+        b.writeln(
+          '  static final Paint $field = Paint()..color = const $color${gradient.isSolid ? '' : '..shader = _radialShader$index'};',
+        );
+        paintIndex++;
+      }
+      index++;
+    }
+  }
+
+  Map<String, Set<double>> _buildRadialOpacities() {
+    final result = <String, Set<double>>{};
+    void visit(List<SvgElement> elements) {
+      for (final element in elements) {
+        if (element is SvgGroup) {
+          visit(element.children);
+          continue;
+        }
+        final id = element.style.fillServerId;
+        final opacity = element.style.fillOpacity * element.style.opacity;
+        if (id != null && document.radialGradients.containsKey(id) && opacity > 0) {
+          result.putIfAbsent(id, () => {}).add(opacity);
+        }
+      }
+    }
+
+    visit(document.children);
+    return result;
+  }
+
+  String _radialColor((double, double, double, double) color, {required double opacity}) =>
+      'Color.from(alpha: ${_literal(color.$4 * opacity)}, red: ${_literal(color.$1)}, green: ${_literal(color.$2)}, blue: ${_literal(color.$3)})';
+
+  // Only replace filled, unstroked radial paths: their other drawing methods
+  // never consume the geometry. Keep all ambiguous outlines on the path route.
+  (double, double, double, double)? _radialRect(SvgPath element) {
+    if (!document.radialGradients.containsKey(element.style.fillServerId) ||
+        element.style.strokeColor != null ||
+        element.style.fillOpacity * element.style.opacity <= 0) {
+      return null;
+    }
+    final commands = element.commands;
+    if ((commands.length != 5 && commands.length != 6) ||
+        commands.first is! SvgMoveTo ||
+        commands.last is! SvgClosePath) {
+      return null;
+    }
+    final first = commands.first as SvgMoveTo;
+    final points = [(first.x, first.y)];
+    for (var i = 1; i < commands.length - 1; i++) {
+      final command = commands[i];
+      if (command is! SvgLineTo) return null;
+      if (i == 4) {
+        if (command.x != first.x || command.y != first.y) return null;
+      } else {
+        points.add((command.x, command.y));
+      }
+    }
+    if (points.toSet().length != 4) return null;
+    for (var i = 0; i < 4; i++) {
+      final p = points[i];
+      final next = points[(i + 1) % 4];
+      if ((p.$1 == next.$1) == (p.$2 == next.$2)) return null;
+    }
+    final bounds = (
+      points.map((p) => p.$1).reduce((a, b) => a < b ? a : b),
+      points.map((p) => p.$2).reduce((a, b) => a < b ? a : b),
+      points.map((p) => p.$1).reduce((a, b) => a > b ? a : b),
+      points.map((p) => p.$2).reduce((a, b) => a > b ? a : b),
+    );
+    final gradient = document.radialGradients[element.style.fillServerId]!;
+    if (gradient.isSolid || gradient.colors.last.$4 != 0) return bounds;
+    final matrix = gradient.transform;
+    final cx = matrix == null ? gradient.cx : matrix.a * gradient.cx + matrix.c * gradient.cy + matrix.e;
+    final cy = matrix == null ? gradient.cy : matrix.b * gradient.cx + matrix.d * gradient.cy + matrix.f;
+    final rx = matrix == null
+        ? gradient.radius
+        : gradient.radius * math.sqrt(matrix.a * matrix.a + matrix.c * matrix.c);
+    final ry = matrix == null
+        ? gradient.radius
+        : gradient.radius * math.sqrt(matrix.b * matrix.b + matrix.d * matrix.d);
+    if (![cx, cy, rx, ry].every((value) => value.isFinite)) return bounds;
+    // With a transparent final stop and pad spreading, everything outside
+    // this transformed circle is transparent. Avoid shading those pixels.
+    final left = math.max(bounds.$1, cx - rx);
+    final top = math.max(bounds.$2, cy - ry);
+    return (left, top, math.max(left, math.min(bounds.$3, cx + rx)), math.max(top, math.min(bounds.$4, cy + ry)));
+  }
+
   Map<SvgElement, SvgMatrix> _buildPatternTransforms() {
     final result = <SvgElement, SvgMatrix>{};
     void visit(List<SvgElement> elements, SvgMatrix parent) {
@@ -1234,6 +1376,18 @@ class SvgGenerator {
   void _emitServerDraw(StringBuffer b, SvgElement element, String id) {
     final field = _geometryFields[element]!;
     final opacity = _fmt(element.style.fillOpacity * element.style.opacity);
+    if (document.radialGradients.containsKey(id)) {
+      final method = switch (element) {
+        SvgRect(:final rx, :final ry) => rx > 0 || ry > 0 ? 'drawRRect' : 'drawRect',
+        SvgCircle() || SvgEllipse() => 'drawOval',
+        SvgPath() => _radialRectPaths.contains(element) ? 'drawRect' : 'drawPath',
+        SvgPolygon() || SvgPolyline() || SvgLine() => 'drawPath',
+        SvgGroup() => throw StateError('Groups do not own geometry.'),
+      };
+      final paint = _radialPaints[(id, element.style.fillOpacity * element.style.opacity)]!;
+      b.writeln('    canvas.$method($field, $paint);');
+      return;
+    }
     if (document.gradients.containsKey(id)) {
       final index = document.gradients.keys.toList().indexOf(id);
       final paint = '(_gradient$index..color = const Color.from(alpha: $opacity, red: 1, green: 1, blue: 1))';

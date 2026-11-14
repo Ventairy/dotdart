@@ -10,6 +10,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' show ImageFilter;
+import 'dart:ui' as ui show Gradient;
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/widgets.dart';
 
@@ -411,6 +412,9 @@ mixin _DotdartSvgSizing on StatelessWidget {
 /// ```dart
 /// $Icons.nestedGroups(<params>);
 /// ```
+/// ```dart
+/// $Icons.radialPaints(<params>);
+/// ```
 abstract final class $Icons {
   $Icons._();
 
@@ -519,6 +523,21 @@ abstract final class $Icons {
     innerTextColor: innerTextColor,
   );
 
+  /// Builds the `RadialPaints` widget from `radialPaints.svg`.
+  static Widget radialPaints({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    Color? color1,
+  }) => _RadialPaints(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    color1: color1,
+  );
+
   /// Builds the asset matching [fileName], or returns null if it is absent.
   ///
   /// Pass the original filename, including its extension and exact case.
@@ -551,6 +570,7 @@ abstract final class $Icons {
     ),
     'masked_arc.svg' => maskedArc(key: key, width: width, height: height),
     'nested_groups.svg' => nestedGroups(key: key, width: width, height: height),
+    'radial_paints.svg' => radialPaints(key: key, width: width, height: height),
     _ => null,
   };
 }
@@ -2644,5 +2664,187 @@ class _NestedGroupsPainter extends CustomPainter {
     return oldDelegate.backgroundColor != backgroundColor ||
         oldDelegate.outlineColor != outlineColor ||
         oldDelegate.innerTextColor != innerTextColor;
+  }
+}
+
+/// A dotdart-generated SVG widget from `assets/icons/radial_paints.svg`.
+///
+/// Renders a 32.0×24.0 SVG
+/// on a viewBox of 0.0 0.0 32.0 24.0.
+/// No flutter_svg runtime dependency — drawn entirely via [CustomPainter].
+class _RadialPaints extends StatelessWidget with _DotdartSvgSizing {
+  const _RadialPaints({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.color1,
+  });
+
+  static const double _svgWidth = 32;
+  static const double _svgHeight = 24;
+  static const double _viewBoxMinX = 0;
+  static const double _viewBoxMinY = 0;
+  static const double _viewBoxWidth = 32;
+  static const double _viewBoxHeight = 24;
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Color 1 — defaults to 0xffff00ff.
+  final Color? color1;
+
+  @override
+  double? get svgWidgetWidth => width;
+
+  @override
+  double? get svgWidgetHeight => height;
+
+  @override
+  bool get svgMaintainAspectRatio => maintainAspectRatio;
+
+  @override
+  double get svgNativeWidth => _RadialPaints._svgWidth;
+
+  @override
+  double get svgNativeHeight => _RadialPaints._svgHeight;
+
+  @override
+  double get svgViewBoxWidth => _RadialPaints._viewBoxWidth;
+
+  @override
+  double get svgViewBoxHeight => _RadialPaints._viewBoxHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _RadialPaintsPainter(
+            color1: color1 ?? const Color(0xffff00ff),
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _RadialPaintsPainter extends CustomPainter {
+  _RadialPaintsPainter({required this.color1});
+
+  final Color color1;
+
+  static final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+
+  static final Path __path0 = Path()
+    ..moveTo(0, 0)
+    ..lineTo(32, 0)
+    ..lineTo(32, 24)
+    ..lineTo(0, 24)
+    ..lineTo(0, 0)
+    ..close();
+
+  static const Rect _radialRect0 = Rect.fromLTRB(0, 0, 24, 16);
+  static const Rect _radialRect1 = Rect.fromLTRB(
+    17.416994755741637,
+    15.071796769724491,
+    32,
+    24,
+  );
+  static final Path __clip0 = Path()
+    ..addRect(const Rect.fromLTWH(0, 0, 32, 24));
+
+  static final _radialShader0 = ui.Gradient.radial(
+    Offset.zero,
+    1,
+    const [
+      Color.from(alpha: 1, red: 0, green: 0, blue: 1),
+      Color.from(alpha: 0.5, red: 0, green: 0, blue: 1),
+      Color.from(alpha: 0, red: 0, green: 0, blue: 1),
+    ],
+    const [0.0, 0.5, 1.0],
+    TileMode.clamp,
+    Float64List.fromList([
+      16.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      8.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      8.0,
+      8.0,
+      0.0,
+      1.0,
+    ]),
+  );
+  static final Paint _radialGradient0Paint0 = Paint()
+    ..color = const Color.from(alpha: 1, red: 1, green: 1, blue: 1)
+    ..shader = _radialShader0;
+  static final _radialShader1 = ui.Gradient.radial(
+    Offset.zero,
+    1,
+    const [
+      Color.from(alpha: 0.8, red: 1, green: 1, blue: 0),
+      Color.from(alpha: 0, red: 1, green: 1, blue: 0),
+    ],
+    const [0.0, 1.0],
+    TileMode.clamp,
+    Float64List.fromList([
+      10.392304845413264,
+      5.999999999999999,
+      0.0,
+      0.0,
+      -1.9999999999999998,
+      3.464101615137755,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      28.0,
+      22.0,
+      0.0,
+      1.0,
+    ]),
+  );
+  static final Paint _radialGradient1Paint0 = Paint()
+    ..color = const Color.from(alpha: 1, red: 1, green: 1, blue: 1)
+    ..shader = _radialShader1;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scaleX = size.width / _RadialPaints._viewBoxWidth;
+    final scaleY = size.height / _RadialPaints._viewBoxHeight;
+    canvas
+      ..save()
+      ..scale(scaleX, scaleY)
+      ..translate(-_RadialPaints._viewBoxMinX, -_RadialPaints._viewBoxMinY);
+
+    canvas.save();
+    canvas.clipPath(__clip0);
+    canvas.drawPath(__path0, _fillPaint..color = color1);
+    canvas.drawRect(_radialRect0, _radialGradient0Paint0);
+    canvas.drawRect(_radialRect1, _radialGradient1Paint0);
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _RadialPaintsPainter oldDelegate) {
+    return oldDelegate.color1 != color1;
   }
 }

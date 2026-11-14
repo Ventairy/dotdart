@@ -2,6 +2,7 @@ import 'svg_drop_shadow.dart';
 import 'svg_element.dart';
 import 'svg_image_pattern.dart';
 import 'svg_linear_gradient.dart';
+import 'svg_radial_gradient.dart';
 import 'svg_style.dart';
 
 /// Parsed SVG viewBox.
@@ -42,6 +43,7 @@ class SvgDocument {
     this.clipPaths = const {},
     this.dropShadows = const {},
     this.gradients = const {},
+    this.radialGradients = const {},
     this.patterns = const {},
     this.maskRegions = const {},
   });
@@ -69,6 +71,9 @@ class SvgDocument {
 
   /// Linear gradients keyed by source ID.
   final Map<String, SvgLinearGradient> gradients;
+
+  /// Centered radial gradients keyed by source ID.
+  final Map<String, SvgRadialGradient> radialGradients;
 
   /// Embedded PNG patterns keyed by source ID.
   final Map<String, SvgImagePattern> patterns;
