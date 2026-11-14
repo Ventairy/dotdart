@@ -97,14 +97,14 @@ Import and use the namespace generated from each source folder:
 import 'package:my_app/gen/icons.g.dart';
 import 'package:my_app/gen/images.g.dart';
 import 'package:my_app/gen/lotties.g.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 final closeIcon = $Icons.close(width: 24);
 final nestedGroups = $Icons.nestedGroups(
   width: 80,
-  backgroundColor: Colors.blue,
-  outlineColor: Colors.black,
-  innerTextColor: Colors.white,
+  backgroundColor: const Color(0xFF2196F3),
+  outlineColor: const Color(0xFF000000),
+  innerTextColor: const Color(0xFFFFFFFF),
 );
 final pulse = $Lotties.pulse(
   width: 96,
@@ -117,7 +117,7 @@ final jobCards = $Lotties.jobCards(
   clip: false,
   overrides: const JobCardsOverrides(
     jobTitleText: 'Event server',
-    payTextColor: Colors.green,
+    payTextColor: const Color(0xFF4CAF50),
   ),
 );
 final image = $Images.profile(width: 160);
@@ -192,6 +192,10 @@ Generated Lotties play once by default and keep their final frame visible. Pass
 generated namespace library re-exports `LottiePlayback`, so no additional
 import is needed.
 
+Automatic playback pauses when either the platform's Reduce Motion preference
+or disabled-animation setting is active. `respectDisableAnimations: false`
+opts out of both preferences.
+
 Supported trim paths preserve animated start, end, and offset values in the
 default drawing direction, including parallel and sequential handling when one
 shape group contains multiple paths.
@@ -242,8 +246,8 @@ beside the namespace libraries for shared generated types such as
 
 ## Requirements
 
-- Dart `>=3.12.0 <4.0.0`
-- Flutter `3.44.0` for development in this repository
+- Dart `>=3.14.0 <4.0.0`
+- Flutter `>=3.50.0` for generation and generated widgets
 - `build_runner >=2.15.0` for the post-process builder flow
 
 ## Status

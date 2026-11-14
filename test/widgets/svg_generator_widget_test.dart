@@ -11,8 +11,8 @@ import 'package:dotdart/src/generators/svg_generator.dart';
 import 'package:dotdart/src/models/svg_document.dart';
 import 'package:dotdart/src/models/svg_element.dart';
 import 'package:dotdart/src/models/svg_style.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

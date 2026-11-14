@@ -78,13 +78,15 @@ name: dotdart_package_consumer_fixture
 publish_to: none
 
 environment:
-  sdk: ">=3.12.0 <4.0.0"
+  sdk: ">=3.14.0 <4.0.0"
+  flutter: ">=3.50.0"
 
 dependencies:
   dotdart_generated_consumer_fixture:
     path: ../generated_consumer_fixture
   flutter:
     sdk: flutter
+  material_ui: ^1.9.0
 
 dev_dependencies:
   flutter_test:
@@ -93,8 +95,8 @@ dev_dependencies:
     final testDirectory = Directory('${appDirectory.path}/test')..createSync(recursive: true);
     File('${testDirectory.path}/package_image_test.dart').writeAsStringSync(r'''
 import 'package:dotdart_generated_consumer_fixture/gen/images.g.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   testWidgets('when rendering a package image, it should load from the dependency', (tester) async {

@@ -3,6 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SharedEmitter', () {
+    test('when emitting Lottie motion policy, it should respect either platform motion preference', () {
+      final code = SharedEmitter.lottieAnimationStateMixin();
+
+      expect(
+        code,
+        contains(
+          'lottieRespectDisableAnimations &&\n'
+          '        ((MediaQuery.maybeDisableAnimationsOf(context) ?? false) ||\n'
+          '            (MediaQuery.maybeReduceMotionOf(context) ?? false))',
+        ),
+      );
+    });
+
     test('when applying full opacity, it should reuse the original color', () {
       final code = SharedEmitter.applyOpacityFunction();
 

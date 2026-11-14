@@ -3,11 +3,13 @@ description: Runnable example for dotdart-generated SVG, Lottie, and image/GIF w
 publish_to: none
 
 environment:
-  sdk: ">=3.12.0 <4.0.0"
+  sdk: ">=3.14.0 <4.0.0"
+  flutter: ">=3.50.0"
 
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.9.0
 
 dev_dependencies:
   alchemist: ^0.14.0
