@@ -1,6 +1,6 @@
 import 'package:alchemist/alchemist.dart';
 import 'package:dotdart_example/gen/lotties.g.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   goldenTest(

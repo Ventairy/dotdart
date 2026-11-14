@@ -1,7 +1,7 @@
 import 'package:dotdart_example/gen/icons.g.dart';
 import 'package:dotdart_example/gen/images.g.dart';
 import 'package:dotdart_example/gen/lotties.g.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() => runApp(const DotdartExampleApp());
 

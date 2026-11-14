@@ -1,6 +1,6 @@
 name: dotdart
 description: Build-time Flutter asset compiler that generates typed, optimized widgets from SVG, Lottie, images, and GIFs for mobile, web, and desktop.
-version: 0.11.5
+version: 0.12.0
 homepage: https://github.com/Ventairy/dotdart
 repository: https://github.com/Ventairy/dotdart
 issue_tracker: https://github.com/Ventairy/dotdart/issues
@@ -13,7 +13,8 @@ topics:
   - svg
 
 environment:
-  sdk: ">=3.12.0 <4.0.0"
+  sdk: ">=3.14.0 <4.0.0"
+  flutter: ">=3.50.0"
 
 dependencies:
   build: ^4.0.0

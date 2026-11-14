@@ -130,6 +130,9 @@ paint beyond that boundary.
 
 Automatic playback uses `LottiePlayback.once` by default and keeps the final
 frame visible. Pass `playback: LottiePlayback.loop` to repeat continuously.
+Playback pauses for either Reduce Motion or disabled animations unless
+`respectDisableAnimations` is false. Manual `progress` remains under your
+control.
 Manual `progress` continues to take precedence over automatic playback.
 
 Generated text and color fields live on the asset's generated `overrides`

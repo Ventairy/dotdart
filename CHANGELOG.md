@@ -1,5 +1,8 @@
-## 0.11.5
+## 0.12.0
 
+- **BREAKING:** Requires Flutter 3.50 and Dart 3.14 for generation and generated
+  widgets. Generated Lottie playback now respects the platform's Reduce Motion
+  preference as well as disabled animations.
 - Added SVG linear gradient fills in user coordinates and elliptical arc paths,
   with cached shaders and geometry.
 - Added SVG patterns containing an embedded PNG or a local image reference.
