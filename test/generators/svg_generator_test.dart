@@ -10,6 +10,123 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgGenerator', () {
+    test('when a radial fill ends in transparency, it should bound rectangular draws to the transformed circle', () {
+      final code = SvgGenerator(
+        SvgParser.parse(
+          File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg').readAsStringSync(),
+        ).document,
+        'assets/icons/radial.svg',
+      ).generateWidgetClass();
+      expect(code, contains('Rect.fromLTRB(0, 0, 24, 16)'));
+    });
+
+    test('when a radial fill remains visible outside its radius, it should preserve the entire rectangle', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceAll('stop-opacity="0"', 'stop-opacity="0.25"');
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg').generateWidgetClass();
+      expect(code, contains('Rect.fromLTRB(0, 0, 32, 24)'));
+    });
+
+    test('when radial fills are invisible, it should omit shaders, paints and their imports', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceAll('<path ', '<path fill-opacity="0" ');
+      final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg');
+      expect(
+        [generator.requiresTypedData, generator.requiresRadialGradient, generator.generateWidgetClass()],
+        [false, false, isNot(contains('_radialGradient'))],
+      );
+    });
+    test('when generating transformed radial fills, it should cache native shaders, paints and shared rectangles', () {
+      final generator = SvgGenerator(
+        SvgParser.parse(
+          File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg').readAsStringSync(),
+        ).document,
+        'assets/icons/radial_paints.svg',
+      );
+      final code = generator.generateWidgetClass();
+      expect(
+        [generator.requiresTypedData, generator.requiresRadialGradient, code],
+        [
+          true,
+          true,
+          allOf([
+            contains('static final _radialShader0 = ui.Gradient.radial'),
+            contains('Offset.zero, 1, const ['),
+            contains('Float64List.fromList([16.0, 0.0, 0.0, 0.0, 0.0, 8.0'),
+            contains('static final Paint _radialGradient0Paint0 = Paint()'),
+            contains('canvas.drawRect(_radialRect0, _radialGradient0Paint0);'),
+            contains('canvas.drawRect(_radialRect1, _radialGradient1Paint0);'),
+            isNot(contains('_radialRect2')),
+            isNot(
+              matches(r'void paint[\s\S]*(?:Gradient\.radial|Float64List|Paint\(|saveLayer|_radialGradient\w*\.\.)'),
+            ),
+          ]),
+        ],
+      );
+    });
+
+    test('when radial opacity varies, it should share the shader and cache paints per opacity', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceFirst('fill="url(#warm)"', 'fill="url(#glow)" fill-opacity="0.3123456789"');
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg').generateWidgetClass();
+      expect(
+        code,
+        allOf(
+          contains('alpha: 0.3123456789'),
+          contains('canvas.drawRect(_radialRect0, _radialGradient0Paint1);'),
+          isNot(contains('_radialShader1')),
+        ),
+      );
+    });
+
+    for (final path in ['M0 0H32V24H0Z', 'M0 0V24H32V0Z', 'M32 24H0V0H32V24Z']) {
+      test('when a radial rectangle uses $path, it should emit a native rectangle', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+            .readAsStringSync()
+            .replaceAll('M0 0H32V24H0V0Z', path);
+        final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg').generateWidgetClass();
+        expect(code, contains('canvas.drawRect(_radialRect0, _radialGradient0Paint0);'));
+      });
+    }
+
+    for (final path in ['M0 0L32 24L32 0L0 24Z', 'M0 0H32V24H0V1Z', 'M0 0H32V24H0V0', 'M0 0H32V24H0Z M0 0H32V24H0Z']) {
+      test('when a radial path uses $path, it should preserve its path geometry', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+            .readAsStringSync()
+            .replaceAll('M0 0H32V24H0V0Z', path);
+        final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg').generateWidgetClass();
+        expect(code, contains('canvas.drawPath(__path1, _radialGradient0Paint0);'));
+      });
+    }
+
+    test('when a radial path also has a stroke, it should retain its path for both operations', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceFirst('fill="url(#glow)"', 'fill="url(#glow)" stroke="black"');
+      final code = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg').generateWidgetClass();
+      expect(
+        code,
+        allOf(
+          contains('canvas.drawPath(__path1, _radialGradient0Paint0);'),
+          contains('canvas.drawPath(__path1, _strokePaint'),
+        ),
+      );
+    });
+
+    test('when radial radii are zero, it should emit only constant solid paints without shader imports', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceAll('r="1"', 'r="0"');
+      final generator = SvgGenerator(SvgParser.parse(source).document, 'assets/icons/radial.svg');
+      expect(
+        [generator.requiresTypedData, generator.requiresRadialGradient, generator.generateWidgetClass()],
+        [false, false, allOf(contains('Paint()..color = const Color.from(alpha: 0,'), isNot(contains('ui.Gradient')))],
+      );
+    });
+
     test('when arc geometry uses bounding-box image coordinates, it should explain supported alternatives', () {
       final source = File(
         'test/fixtures/generated_consumer/assets/icons/curved_pattern.svg',

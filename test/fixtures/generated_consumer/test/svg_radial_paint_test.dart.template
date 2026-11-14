@@ -1,0 +1,37 @@
+import 'package:dotdart_generated_consumer_fixture/gen/icons.g.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+
+void main() {
+  testWidgets('when repainting radial fills, it should reuse paints and avoid offscreen layers', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Center(child: $Icons.radialPaints(width: 64))));
+    await tester.pumpAndSettle();
+    final painter = tester.widget<CustomPaint>(find.byType(CustomPaint).last).painter!;
+    final first = _RadialRecordingCanvas();
+    final second = _RadialRecordingCanvas();
+    painter.paint(first, const Size(64, 48));
+    painter.paint(second, const Size(64, 48));
+    final firstPaints = first.paintReferences;
+    final secondPaints = second.paintReferences;
+    expect(
+      [
+        firstPaints.length,
+        for (var i = 0; i < firstPaints.length; i++) identical(firstPaints[i], secondPaints[i]),
+        second.invocations.any((call) => call.invocation.memberName == #saveLayer),
+      ],
+      [2, true, true, false],
+    );
+  });
+}
+
+// TestRecordingCanvas copies paints to preserve their recorded values. Retain
+// the original arguments separately to verify reuse rather than those copies.
+class _RadialRecordingCanvas extends TestRecordingCanvas {
+  final List<Paint> paintReferences = [];
+
+  @override
+  void drawRect(Rect rect, Paint paint) {
+    paintReferences.add(paint);
+    super.drawRect(rect, paint);
+  }
+}

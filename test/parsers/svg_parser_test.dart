@@ -8,6 +8,95 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgParser', () {
+    test('when parsing elliptical radial fills, it should precompose their transforms and preserve stop alpha', () {
+      final gradient = SvgParser.parse(
+        File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg').readAsStringSync(),
+      ).document.radialGradients['glow']!;
+      expect(
+        [
+          gradient.cx,
+          gradient.cy,
+          gradient.radius,
+          gradient.transform!.storage,
+          gradient.stops,
+          gradient.colors.map((color) => color.$4).toList(),
+        ],
+        [
+          0,
+          0,
+          1,
+          [16, 0, 0, 0, 0, 8, 0, 0, 0, 0, 1, 0, 8, 8, 0, 1],
+          [0, 0.5, 1],
+          [1, 0.5, 0],
+        ],
+      );
+    });
+
+    for (final replacement in [
+      'gradientUnits="objectBoundingBox"',
+      'gradientUnits="userSpaceOnUse" spreadMethod="repeat"',
+      'gradientUnits="userSpaceOnUse" fx="0.2"',
+      'gradientUnits="userSpaceOnUse" fy="0.2"',
+      'gradientUnits="userSpaceOnUse" fr="0.2"',
+      'gradientUnits="userSpaceOnUse" href="#other"',
+    ]) {
+      test('when a radial fill uses $replacement, it should reject the unsupported variant', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+            .readAsStringSync()
+            .replaceFirst('gradientUnits="userSpaceOnUse"', replacement);
+        expect(() => SvgParser.parse(source), throwsA(isA<DotdartUnsupportedFeatureException>()));
+      });
+    }
+
+    for (final replacement in ['r="-1"', 'r="NaN"', 'r="Infinity"']) {
+      test('when a radial fill has $replacement, it should reject the invalid radius', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+            .readAsStringSync()
+            .replaceFirst('r="1"', replacement);
+        expect(() => SvgParser.parse(source), throwsA(isA<DotdartInvalidSvgException>()));
+      });
+    }
+
+    for (final replacement in ['r="50%"', '']) {
+      test('when a radial radius is "$replacement", it should require explicit numeric coordinates', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+            .readAsStringSync()
+            .replaceFirst('r="1"', replacement);
+        expect(() => SvgParser.parse(source), throwsA(isA<DotdartUnsupportedFeatureException>()));
+      });
+    }
+
+    for (final transform in ['scale(0)', 'scale(1e300 1e300)', 'translate(NaN)', 'scale(2) garbage']) {
+      test('when a radial transform is $transform, it should reject the invalid transform', () {
+        final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+            .readAsStringSync()
+            .replaceFirst('translate(8 8) scale(16 8)', transform);
+        expect(() => SvgParser.parse(source), throwsA(isA<DotdartInvalidSvgException>()));
+      });
+    }
+
+    test('when a radial fill is unused, it should remove its cached definition', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceAll('fill="url(#glow)"', 'fill="red"');
+      expect(SvgParser.parse(source).document.radialGradients.keys, ['warm']);
+    });
+
+    test('when a radial transform is identity, it should omit matrix storage', () {
+      final source = File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg')
+          .readAsStringSync()
+          .replaceFirst('translate(8 8) scale(16 8)', 'matrix(1 0 0 1 0 0)');
+      expect(SvgParser.parse(source).document.radialGradients['glow']!.transform, isNull);
+    });
+
+    test('when parsing transformed radial fills, it should accept the artwork without warnings', () {
+      expect(
+        SvgParser.parse(File('test/fixtures/generated_consumer/assets/icons/radial_paints.svg').readAsStringSync())
+            .warnings,
+        isEmpty,
+      );
+    });
+
     test('when a mask covers overlapping shapes, it should reject compositing that cannot become a clip', () {
       final source = File(
         'test/fixtures/generated_consumer/assets/icons/masked_arc.svg',

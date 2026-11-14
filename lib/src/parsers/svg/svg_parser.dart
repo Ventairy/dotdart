@@ -8,6 +8,7 @@ import '../../models/svg_drop_shadow.dart';
 import '../../models/svg_element.dart';
 import '../../models/svg_image_pattern.dart';
 import '../../models/svg_linear_gradient.dart';
+import '../../models/svg_radial_gradient.dart';
 import '../../models/svg_style.dart';
 import '../lottie_parser.dart' show DotdartUnsupportedFeatureException;
 import 'svg_drop_shadow_parser.dart';
@@ -50,6 +51,7 @@ class SvgParser {
   final Set<XElement> _imageDefinitions = {};
   late final SvgViewBox _viewBox;
   final Map<String, SvgLinearGradient> _gradients = {};
+  final Map<String, SvgRadialGradient> _radialGradients = {};
   final Map<String, SvgImagePattern> _patterns = {};
   final Map<String, (double, double, double, double)> _maskRegions = {};
 
@@ -94,6 +96,7 @@ class SvgParser {
     final usedPaints = <String>{};
     _collectUsedPaints(children, usedPaints);
     _gradients.removeWhere((id, _) => !usedPaints.contains(id));
+    _radialGradients.removeWhere((id, _) => !usedPaints.contains(id));
     _patterns.removeWhere((id, _) => !usedPaints.contains(id));
     return SvgParseResult(
       document: SvgDocument(
@@ -104,6 +107,7 @@ class SvgParser {
         clipPaths: Map.unmodifiable(_clipPaths),
         dropShadows: Map.unmodifiable(_dropShadows),
         gradients: Map.unmodifiable(_gradients),
+        radialGradients: Map.unmodifiable(_radialGradients),
         patterns: Map.unmodifiable(_patterns),
         maskRegions: Map.unmodifiable(_maskRegions),
       ),
@@ -169,7 +173,8 @@ class SvgParser {
         _parseGradient(element);
         return null;
       case 'radialGradient':
-        throw const DotdartUnsupportedFeatureException('Gradients are not supported.');
+        _parseRadialGradient(element);
+        return null;
       case 'use':
       case 'symbol':
         throw DotdartUnsupportedFeatureException(
@@ -422,6 +427,8 @@ class SvgParser {
     switch (definition.tag) {
       case 'linearGradient':
         _parseGradient(definition);
+      case 'radialGradient':
+        _parseRadialGradient(definition);
       case 'pattern':
         _parsePattern(definition);
       default:
@@ -443,11 +450,86 @@ class SvgParser {
     if (['x1', 'y1', 'x2', 'y2'].any((key) => element.attrs[key]?.contains('%') ?? false)) {
       throw const DotdartUnsupportedFeatureException('Linear gradient coordinates must use numbers, not percentages.');
     }
+    final (:colors, :stops) = _parseGradientStops(element);
+    _gradients[id] = SvgLinearGradient(
+      x1: _number(element.attrs['x1'], fallback: 0),
+      y1: _number(element.attrs['y1'], fallback: 0),
+      x2: _number(element.attrs['x2'], fallback: _viewBox.width),
+      y2: _number(element.attrs['y2'], fallback: 0),
+      colors: colors,
+      stops: stops,
+    );
+  }
+
+  void _parseRadialGradient(XElement element) {
+    final id = _definitionId(element);
+    if (_radialGradients.containsKey(id)) return;
+    _checkAttributes(element, {
+      'id',
+      'cx',
+      'cy',
+      'r',
+      'fx',
+      'fy',
+      'fr',
+      'gradientUnits',
+      'spreadMethod',
+      'gradientTransform',
+    });
+    if (element.attrs['gradientUnits'] != 'userSpaceOnUse' || (element.attrs['spreadMethod'] ?? 'pad') != 'pad') {
+      throw const DotdartUnsupportedFeatureException(
+        'Radial gradients require gradientUnits="userSpaceOnUse" and spreadMethod="pad".',
+      );
+    }
+    if (['cx', 'cy', 'r'].any((key) => !element.attrs.containsKey(key)) ||
+        ['cx', 'cy', 'r', 'fx', 'fy', 'fr'].any((key) => element.attrs[key]?.contains('%') ?? false)) {
+      throw const DotdartUnsupportedFeatureException(
+        'Radial gradients require explicit numeric cx, cy, and r coordinates; percentages are not supported.',
+      );
+    }
+    final cx = _number(element.attrs['cx'], fallback: 0);
+    final cy = _number(element.attrs['cy'], fallback: 0);
+    final radius = _number(element.attrs['r'], fallback: 0);
+    if (radius < 0) throw const DotdartInvalidSvgException('Radial gradient radius must not be negative.');
+    if (_number(element.attrs['fx'], fallback: cx) != cx ||
+        _number(element.attrs['fy'], fallback: cy) != cy ||
+        _number(element.attrs['fr'], fallback: 0) != 0) {
+      throw const DotdartUnsupportedFeatureException(
+        'Radial gradients require a focal point at cx/cy and a zero focal radius.',
+      );
+    }
+    SvgMatrix? transform;
+    if (element.attrs['gradientTransform'] case final source?) {
+      try {
+        final matrix = SvgMatrix.compose(SvgTransform.parse(source));
+        final determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+        if (!determinant.isFinite || determinant == 0) {
+          throw const FormatException('Radial gradient transforms must be finite and invertible.');
+        }
+        if (matrix.a != 1 || matrix.b != 0 || matrix.c != 0 || matrix.d != 1 || matrix.e != 0 || matrix.f != 0) {
+          transform = matrix;
+        }
+      } on FormatException catch (error) {
+        throw DotdartInvalidSvgException('Invalid radial gradient transform: ${error.message}');
+      }
+    }
+    final (:colors, :stops) = _parseGradientStops(element);
+    _radialGradients[id] = SvgRadialGradient(
+      cx: cx,
+      cy: cy,
+      radius: radius,
+      colors: colors,
+      stops: stops,
+      transform: transform,
+    );
+  }
+
+  ({List<(double, double, double, double)> colors, List<double> stops}) _parseGradientStops(XElement element) {
     final colors = <(double, double, double, double)>[];
     final stops = <double>[];
     for (final stop in element.children) {
       if (stop.tag != 'stop') {
-        throw const DotdartUnsupportedFeatureException('Linear gradients may only contain stops.');
+        throw const DotdartUnsupportedFeatureException('SVG gradients may only contain stops.');
       }
       _checkAttributes(stop, {'offset', 'stop-color', 'stop-opacity'});
       final color = _parseColor(stop.attrs['stop-color'] ?? 'black');
@@ -466,15 +548,8 @@ class SvgParser {
         rgba.$4 * _number(stop.attrs['stop-opacity'], fallback: 1).clamp(0.0, 1.0),
       ));
     }
-    if (stops.isEmpty) throw const DotdartInvalidSvgException('Linear gradients require at least one stop.');
-    _gradients[id] = SvgLinearGradient(
-      x1: _number(element.attrs['x1'], fallback: 0),
-      y1: _number(element.attrs['y1'], fallback: 0),
-      x2: _number(element.attrs['x2'], fallback: _viewBox.width),
-      y2: _number(element.attrs['y2'], fallback: 0),
-      colors: List.unmodifiable(colors),
-      stops: List.unmodifiable(stops),
-    );
+    if (stops.isEmpty) throw const DotdartInvalidSvgException('SVG gradients require at least one stop.');
+    return (colors: List.unmodifiable(colors), stops: List.unmodifiable(stops));
   }
 
   void _parsePattern(XElement element) {

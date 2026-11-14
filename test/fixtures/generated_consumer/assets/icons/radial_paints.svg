@@ -1,0 +1,16 @@
+<svg viewBox="0 0 32 24" xmlns="http://www.w3.org/2000/svg">
+  <g clip-path="url(#viewport)">
+    <path d="M0 0H32V24H0V0Z" fill="#ff00ff"/>
+    <path d="M0 0H32V24H0V0Z" fill="url(#glow)"/>
+    <path d="M0 0H32V24H0V0Z" fill="url(#warm)"/>
+  </g>
+  <defs>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(8 8) scale(16 8)">
+      <stop stop-color="#0000ff"/><stop offset="0.5" stop-color="#0000ff" stop-opacity="0.5"/><stop offset="1" stop-color="#0000ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="warm" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(28 22) rotate(30) scale(12 4)">
+      <stop stop-color="#ffff00" stop-opacity="0.8"/><stop offset="1" stop-color="#ffff00" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="viewport"><rect width="32" height="24"/></clipPath>
+  </defs>
+</svg>
