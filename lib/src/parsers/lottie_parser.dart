@@ -4,6 +4,7 @@ import '../models/lottie_animation.dart';
 import '../models/lottie_composition.dart';
 import '../models/lottie_keyframe.dart';
 import '../models/lottie_layer.dart';
+import '../models/lottie_path_keyframe.dart';
 import '../models/lottie_shape.dart';
 import '../models/lottie_shape_enums.dart';
 import '../models/lottie_text.dart';
@@ -459,7 +460,7 @@ class LottieParser {
       if (expansion != 0) {
         throw DotdartUnsupportedFeatureException('$maskPath uses non-zero mask expansion.');
       }
-      result.add(_parsePath({'ks': property}));
+      result.add(_parsePathGeometry(property['k'], path: '$maskPath.pt.k', direction: 1));
     }
     return result;
   }
@@ -517,6 +518,9 @@ class LottieParser {
     }
     if (hasTrimPath) {
       for (final item in items) {
+        if (item is LottiePath && item.hasAnimatedGeometry) {
+          throw DotdartUnsupportedFeatureException('$path combines animated path geometry with a trim path.');
+        }
         final direction = switch (item) {
           LottiePath() => item.direction,
           LottieRect() => item.direction,
@@ -792,7 +796,7 @@ class LottieParser {
       case 'gr':
         return _parseShapeGroup(raw, warnings, path: path);
       case 'sh':
-        return _parsePath(raw);
+        return _parsePath(raw, path: path);
       case 'rc':
         return _parseRect(raw);
       case 'el':
@@ -811,33 +815,144 @@ class LottieParser {
     }
   }
 
-  static LottiePath _parsePath(Map<String, dynamic> raw) {
-    final ks = raw['ks'] as Map<String, dynamic>? ?? {};
-    final k = ks['k'] as Map<String, dynamic>? ?? {};
-    final vRaw = k['v'] as List<dynamic>? ?? [];
-    final v = vRaw.map<List<double>>((e) {
-      final arr = e as List<dynamic>;
-      return <double>[(arr[0] as num).toDouble(), (arr[1] as num).toDouble()];
-    }).toList();
-    final iRaw = k['i'] as List<dynamic>? ?? [];
-    final i = iRaw.map<List<double>>((e) {
-      final arr = e as List<dynamic>;
-      return <double>[(arr[0] as num).toDouble(), (arr[1] as num).toDouble()];
-    }).toList();
-    final oRaw = k['o'] as List<dynamic>? ?? [];
-    final o = oRaw.map<List<double>>((e) {
-      final arr = e as List<dynamic>;
-      return <double>[(arr[0] as num).toDouble(), (arr[1] as num).toDouble()];
-    }).toList();
-    final closed = k['c'] as bool? ?? true;
-
+  static LottiePath _parsePath(Map<String, dynamic> raw, {required String path}) {
+    final property = _requiredMap(raw['ks'], path: '$path.ks');
+    final direction = (raw['d'] as num?)?.toInt() ?? 1;
+    if (property['a'] != 1) {
+      return _parsePathGeometry(property['k'], path: '$path.ks.k', direction: direction);
+    }
+    final entries = _optionalList(property['k'], path: '$path.ks.k');
+    if (entries.isEmpty) {
+      throw DotdartInvalidLottieException('Expected path keyframes at $path.ks.k.');
+    }
+    final frames = <Map<String, dynamic>>[];
+    final starts = <LottiePath>[];
+    final ends = <LottiePath?>[];
+    final times = <double>[];
+    for (var index = 0; index < entries.length; index++) {
+      final location = '$path.ks.k[$index]';
+      final frame = _requiredMap(entries[index], path: location);
+      frames.add(frame);
+      final time = _finitePathNumber(frame['t'], path: '$location.t');
+      if (times.isNotEmpty && time <= times.last) {
+        throw DotdartInvalidLottieException('Expected strictly increasing path keyframe times at $location.t.');
+      }
+      times.add(time);
+      final start = frame['s'];
+      if (start == null && index == entries.length - 1 && starts.isNotEmpty) {
+        final previous = frames[index - 1];
+        final end = ends.last ?? (previous['h'] == 1 ? starts.last : null);
+        if (end == null) {
+          throw DotdartInvalidLottieException(
+            'Expected a terminal path pose at $location.s or the previous keyframe.e.',
+          );
+        }
+        starts.add(end);
+      } else {
+        starts.add(_parsePathPose(start, path: '$location.s', direction: direction));
+      }
+      ends.add(frame['e'] == null ? null : _parsePathPose(frame['e'], path: '$location.e', direction: direction));
+      for (final pose in [starts.last, ?ends.last]) {
+        if (pose.vertices.length != starts.first.vertices.length || pose.closed != starts.first.closed) {
+          throw DotdartUnsupportedFeatureException(
+            '$location changes the path vertex count or whether the path is closed. '
+            'Export path keyframes with matching geometry.',
+          );
+        }
+      }
+    }
+    final keyframes = <LottiePathKeyframe>[];
+    for (var index = 0; index < frames.length; index++) {
+      final frame = frames[index];
+      final next = index + 1 < frames.length ? frames[index + 1] : null;
+      final outgoing = _optionalMap(frame['o'], path: '$path.ks.k[$index].o');
+      final incoming = _optionalMap(frame['i'] ?? next?['i'], path: '$path.ks.k[$index].i');
+      keyframes.add(
+        LottiePathKeyframe(
+          start: starts[index],
+          end: index + 1 < starts.length ? starts[index + 1] : starts[index],
+          timing: LottieScalarKeyframe(
+            time: times[index],
+            start: 0,
+            end: 1,
+            hold: frame['h'] == 1,
+            outX: _pathEasing(outgoing, 'x', path: '$path.ks.k[$index].o', horizontal: true),
+            outY: _pathEasing(outgoing, 'y', path: '$path.ks.k[$index].o'),
+            inX: _pathEasing(incoming, 'x', path: '$path.ks.k[$index].i', horizontal: true),
+            inY: _pathEasing(incoming, 'y', path: '$path.ks.k[$index].i'),
+          ),
+        ),
+      );
+    }
+    final first = starts.first;
     return LottiePath(
-      vertices: v,
-      inTangents: i,
-      outTangents: o,
-      closed: closed,
-      direction: (raw['d'] as num?)?.toInt() ?? 1,
+      vertices: first.vertices,
+      inTangents: first.inTangents,
+      outTangents: first.outTangents,
+      closed: first.closed,
+      direction: direction,
+      keyframes: List.unmodifiable(keyframes),
     );
+  }
+
+  static double? _pathEasing(Map<String, dynamic> raw, String key, {required String path, bool horizontal = false}) {
+    final value = raw[key];
+    if (value == null) return null;
+    final number = _finitePathNumber(value is List && value.isNotEmpty ? value.first : value, path: '$path.$key');
+    if (horizontal && (number < 0 || number > 1)) {
+      throw DotdartInvalidLottieException('Expected an easing X coordinate between zero and one at $path.$key.');
+    }
+    return number;
+  }
+
+  static LottiePath _parsePathPose(Object? raw, {required String path, required int direction}) {
+    if (raw is! List || raw.length != 1) {
+      throw DotdartInvalidLottieException('Expected one path pose at $path.');
+    }
+    return _parsePathGeometry(raw.single, path: '$path[0]', direction: direction);
+  }
+
+  static LottiePath _parsePathGeometry(Object? raw, {required String path, required int direction}) {
+    final shape = _requiredMap(raw, path: path);
+    final vertices = _pathPoints(shape['v'], path: '$path.v');
+    final incoming = _pathPoints(shape['i'], path: '$path.i');
+    final outgoing = _pathPoints(shape['o'], path: '$path.o');
+    if (vertices.isEmpty || incoming.length != vertices.length || outgoing.length != vertices.length) {
+      throw DotdartInvalidLottieException('Expected matching non-empty vertex and tangent lists at $path.');
+    }
+    final closed = shape['c'];
+    if (closed != null && closed is! bool) {
+      throw DotdartInvalidLottieException('Expected a boolean at $path.c.');
+    }
+    return LottiePath(
+      vertices: vertices,
+      inTangents: incoming,
+      outTangents: outgoing,
+      closed: closed as bool? ?? true,
+      direction: direction,
+    );
+  }
+
+  static List<List<double>> _pathPoints(Object? raw, {required String path}) {
+    final points = _optionalList(raw, path: path);
+    return List.unmodifiable([
+      for (var index = 0; index < points.length; index++) _pathPoint(points[index], path: '$path[$index]'),
+    ]);
+  }
+
+  static List<double> _pathPoint(Object? raw, {required String path}) {
+    if (raw is! List || raw.length != 2) {
+      throw DotdartInvalidLottieException('Expected a two-coordinate path point at $path.');
+    }
+    return List.unmodifiable([
+      _finitePathNumber(raw[0], path: '$path[0]'),
+      _finitePathNumber(raw[1], path: '$path[1]'),
+    ]);
+  }
+
+  static double _finitePathNumber(Object? raw, {required String path}) {
+    if (raw is num && raw.isFinite) return raw.toDouble();
+    throw DotdartInvalidLottieException('Expected a finite number at $path.');
   }
 
   static LottieRect _parseRect(Map<String, dynamic> raw) {

@@ -1,4 +1,5 @@
 import 'lottie_animated_scalar.dart';
+import 'lottie_path_keyframe.dart';
 import 'lottie_shape_enums.dart';
 
 /// A shape item inside a Lottie shape group.
@@ -24,6 +25,7 @@ class LottiePath extends LottieShape {
     required this.outTangents,
     required this.closed,
     this.direction = 1,
+    this.keyframes = const [],
   });
 
   /// Vertex positions, each as `[x, y]`.
@@ -40,6 +42,31 @@ class LottiePath extends LottieShape {
 
   /// Drawing direction: 1 = normal, 3 = reversed.
   final int direction;
+
+  /// Normalized geometry keyframes, or an empty list for a static path.
+  final List<LottiePathKeyframe> keyframes;
+
+  /// Whether the timeline can change the visible geometry.
+  bool get hasAnimatedGeometry =>
+      keyframes.length > 1 &&
+      keyframes.any(
+        (frame) => !hasSameGeometry(frame.start) || (!frame.timing.hold && !hasSameGeometry(frame.end)),
+      );
+
+  /// Whether another pose has exactly the same vertices and relative handles.
+  bool hasSameGeometry(LottiePath other) {
+    if (closed != other.closed || vertices.length != other.vertices.length) return false;
+    for (var index = 0; index < vertices.length; index++) {
+      for (var axis = 0; axis < 2; axis++) {
+        if (vertices[index][axis] != other.vertices[index][axis] ||
+            inTangents[index][axis] != other.inTangents[index][axis] ||
+            outTangents[index][axis] != other.outTangents[index][axis]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
 }
 
 /// A rounded rectangle shape (`ty: "rc"`).

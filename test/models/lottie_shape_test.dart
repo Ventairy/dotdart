@@ -1,10 +1,56 @@
 import 'package:dotdart/src/models/lottie_animated_scalar.dart';
+import 'package:dotdart/src/models/lottie_keyframe.dart';
+import 'package:dotdart/src/models/lottie_path_keyframe.dart';
 import 'package:dotdart/src/models/lottie_shape.dart';
 import 'package:dotdart/src/models/lottie_shape_enums.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('LottiePath', () {
+    const first = LottiePath(
+      vertices: [
+        [0, 0],
+      ],
+      inTangents: [
+        [0, 0],
+      ],
+      outTangents: [
+        [0, 0],
+      ],
+      closed: false,
+    );
+    const last = LottiePath(
+      vertices: [
+        [10, 0],
+      ],
+      inTangents: [
+        [0, 0],
+      ],
+      outTangents: [
+        [0, 0],
+      ],
+      closed: false,
+    );
+    for (final changes in [false, true]) {
+      test(
+        'when path keyframes ${changes ? 'change' : 'repeat'} geometry, it should select the matching cache strategy',
+        () {
+          final end = changes ? last : first;
+          final path = LottiePath(
+            vertices: first.vertices,
+            inTangents: first.inTangents,
+            outTangents: first.outTangents,
+            closed: first.closed,
+            keyframes: [
+              LottiePathKeyframe(start: first, end: end, timing: const LottieScalarKeyframe(time: 0, start: 0, end: 1)),
+              LottiePathKeyframe(start: end, end: end, timing: const LottieScalarKeyframe(time: 60, start: 0)),
+            ],
+          );
+          expect(path.hasAnimatedGeometry, changes);
+        },
+      );
+    }
+
     test('when creating a closed path with vertices and tangents, it should store all of them', () {
       const path = LottiePath(
         vertices: [

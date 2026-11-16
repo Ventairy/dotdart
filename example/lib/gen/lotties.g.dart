@@ -221,6 +221,9 @@ mixin _DotdartLottieAnimationState<T extends StatefulWidget>
 /// $Lotties.cataquiJobCardsCarousel(<params>);
 /// ```
 /// ```dart
+/// $Lotties.pathMorph(<params>);
+/// ```
+/// ```dart
 /// $Lotties.pulse(<params>);
 /// ```
 /// ```dart
@@ -271,6 +274,33 @@ abstract final class $Lotties {
     CataquiJobCardsCarouselOverrides overrides =
         const CataquiJobCardsCarouselOverrides(),
   }) => _CataquiJobCardsCarousel(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    clip: clip,
+    progress: progress,
+    delay: delay,
+    duration: duration,
+    playback: playback,
+    respectDisableAnimations: respectDisableAnimations,
+    overrides: overrides,
+  );
+
+  /// Builds the `PathMorph` widget from `pathMorph.json`.
+  static Widget pathMorph({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    bool clip = true,
+    double? progress,
+    Duration delay = Duration.zero,
+    Duration? duration,
+    LottiePlayback playback = LottiePlayback.once,
+    bool respectDisableAnimations = true,
+    PathMorphOverrides overrides = const PathMorphOverrides(),
+  }) => _PathMorph(
     key: key,
     width: width,
     height: height,
@@ -357,6 +387,7 @@ abstract final class $Lotties {
       width: width,
       height: height,
     ),
+    'path_morph.json' => pathMorph(key: key, width: width, height: height),
     'pulse.json' => pulse(key: key, width: width, height: height),
     'trim_path.json' => trimPath(key: key, width: width, height: height),
     _ => null,
@@ -12497,6 +12528,260 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     _textPainter44?.dispose();
     _textPainter45?.dispose();
     _textPainter46?.dispose();
+  }
+}
+
+/// Text and color values that replace defaults in `path_morph.json`.
+final class PathMorphOverrides {
+  /// Creates Lottie value overrides.
+  const PathMorphOverrides({this.morphColor});
+
+  /// Replacement color for the `Morph` Lottie layer.
+  final Color? morphColor;
+}
+
+/// A dotdart-generated animated widget from `assets/lotties/path_morph.json`.
+///
+/// Renders a 1000ms animation
+/// (60 frames at 60.0Hz)
+/// on a 100×100 canvas.
+/// No Lottie runtime dependency — the animation is drawn
+/// entirely via [CustomPainter].
+class _PathMorph extends StatefulWidget {
+  const _PathMorph({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.clip = true,
+    this.progress,
+    this.delay = Duration.zero,
+    this.duration,
+    this.playback = LottiePlayback.once,
+    this.respectDisableAnimations = true,
+    this.overrides = const PathMorphOverrides(),
+  });
+
+  static const double _lottieWidth = 100;
+  static const double _lottieHeight = 100;
+  static const int _totalFrames = 60;
+  static const Duration _nativeDuration = Duration(milliseconds: 1000);
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Whether painting is clipped to the Lottie canvas bounds.
+  final bool clip;
+
+  /// Fixed animation progress from 0 to 1.
+  final double? progress;
+
+  /// Non-negative time to wait once before automatic playback starts.
+  final Duration delay;
+
+  /// Positive total playback time. When null, uses the duration from the Lottie file.
+  final Duration? duration;
+
+  /// Whether automatic playback runs once or loops continuously.
+  final LottiePlayback playback;
+
+  /// Whether reduced-motion settings pause playback.
+  final bool respectDisableAnimations;
+
+  /// Text and color values that replace defaults from the Lottie file.
+  final PathMorphOverrides overrides;
+
+  @override
+  State<_PathMorph> createState() => _PathMorphState();
+}
+
+class _PathMorphState extends State<_PathMorph>
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _DotdartLottieAnimationState<_PathMorph> {
+  @override
+  double? get lottieWidgetWidth => widget.width;
+
+  @override
+  double? get lottieWidgetHeight => widget.height;
+
+  @override
+  bool get lottieMaintainAspectRatio => widget.maintainAspectRatio;
+
+  @override
+  double? get lottieProgress => widget.progress;
+
+  @override
+  Duration get lottieDelay => widget.delay;
+
+  @override
+  Duration? get lottieDuration => widget.duration;
+
+  @override
+  LottiePlayback get lottiePlayback => widget.playback;
+
+  @override
+  bool get lottieRespectDisableAnimations => widget.respectDisableAnimations;
+
+  @override
+  Duration get lottieNativeDuration => _PathMorph._nativeDuration;
+
+  @override
+  double get lottieCanvasWidth => _PathMorph._lottieWidth;
+
+  @override
+  double get lottieCanvasHeight => _PathMorph._lottieHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _PathMorphPainter(
+            animationProgress: widget.progress == null ? _controller : null,
+            fixedProgress: (widget.progress ?? 0).clamp(0, 1).toDouble(),
+            canvasScaleX: width / _PathMorph._lottieWidth,
+            canvasScaleY: height / _PathMorph._lottieHeight,
+            canvasRect: Rect.fromLTWH(0, 0, width, height),
+            clip: widget.clip,
+            overrides: widget.overrides,
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _PathMorphPainter extends CustomPainter {
+  _PathMorphPainter({
+    required this._fixedProgress,
+    required this._canvasScaleX,
+    required this._canvasScaleY,
+    required this._canvasRect,
+    required this.clip,
+    required this.overrides,
+    this._animationProgress,
+  }) : super(repaint: _animationProgress);
+
+  final double _fixedProgress;
+  final double _canvasScaleX;
+  final double _canvasScaleY;
+  final Rect _canvasRect;
+  final Animation<double>? _animationProgress;
+
+  final bool clip;
+
+  final PathMorphOverrides overrides;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+
+  final Path __path0_0_0Value = Path();
+  double __path0_0_0Frame = double.nan;
+  double __path0_0_0T = double.nan;
+  int __path0_0_0Segment = -1;
+
+  Path __path0_0_0(double frame) {
+    if (frame == __path0_0_0Frame) return __path0_0_0Value;
+    __path0_0_0Frame = frame;
+    if (frame < 30) {
+      var progress = 0.0;
+      if (frame > 0) progress = frame / 30;
+      final t = progress;
+      if (__path0_0_0Segment == 0 && __path0_0_0T == t) return __path0_0_0Value;
+      __path0_0_0Segment = 0;
+      __path0_0_0T = t;
+      __path0_0_0Value
+        ..reset()
+        ..moveTo(10 + 40 * t, 10)
+        ..cubicTo(15 + 40 * t, 20 * t, 25 + 40 * t, 20 * t, 30 + 40 * t, 10)
+        ..cubicTo(30 + 40 * t, 10, 30 + 40 * t, 30, 30 + 40 * t, 30)
+        ..cubicTo(30 + 40 * t, 30, 10 + 40 * t, 30, 10 + 40 * t, 30)
+        ..cubicTo(10 + 40 * t, 30, 10 + 40 * t, 10, 10 + 40 * t, 10)
+        ..close();
+      return __path0_0_0Value;
+    }
+    if (frame < 60) {
+      final progress = (frame - 30) / 30;
+      final t = progress;
+      if (__path0_0_0Segment == 1 && __path0_0_0T == t) return __path0_0_0Value;
+      __path0_0_0Segment = 1;
+      __path0_0_0T = t;
+      __path0_0_0Value
+        ..reset()
+        ..moveTo(50 - 40 * t, 10)
+        ..cubicTo(
+          55 - 40 * t,
+          20 - 20 * t,
+          65 - 40 * t,
+          20 - 20 * t,
+          70 - 40 * t,
+          10,
+        )
+        ..cubicTo(70 - 40 * t, 10, 70 - 40 * t, 30, 70 - 40 * t, 30)
+        ..cubicTo(70 - 40 * t, 30, 50 - 40 * t, 30, 50 - 40 * t, 30)
+        ..cubicTo(50 - 40 * t, 30, 50 - 40 * t, 10, 50 - 40 * t, 10)
+        ..close();
+      return __path0_0_0Value;
+    }
+    const t = 0.0;
+    if (__path0_0_0Segment == 2 && __path0_0_0T == t) return __path0_0_0Value;
+    __path0_0_0Segment = 2;
+    __path0_0_0T = t;
+    __path0_0_0Value
+      ..reset()
+      ..moveTo(10, 10)
+      ..cubicTo(15, 0, 25, 0, 30, 10)
+      ..cubicTo(30, 10, 30, 30, 30, 30)
+      ..cubicTo(30, 30, 10, 30, 10, 30)
+      ..cubicTo(10, 30, 10, 10, 10, 10)
+      ..close();
+    return __path0_0_0Value;
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final progress = _animationProgress?.value ?? _fixedProgress;
+    final frame = math.min(59.999999, progress * _PathMorph._totalFrames);
+
+    canvas.save();
+    if (clip) canvas.clipRect(_canvasRect);
+    canvas.scale(_canvasScaleX, _canvasScaleY);
+
+    _drawMorph0(canvas, frame, 1);
+
+    canvas.restore();
+  }
+
+  void _drawMorph0(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group: Outline
+    final fillPaint0_0 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.morphColor ?? const Color(0xffff0000),
+        layerOpacity * 1,
+      );
+    canvas.drawPath(__path0_0_0(frame), fillPaint0_0);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PathMorphPainter oldDelegate) {
+    return oldDelegate._fixedProgress != _fixedProgress ||
+        oldDelegate._canvasScaleX != _canvasScaleX ||
+        oldDelegate._canvasScaleY != _canvasScaleY ||
+        oldDelegate._canvasRect != _canvasRect ||
+        oldDelegate._animationProgress != _animationProgress ||
+        oldDelegate.clip != clip ||
+        oldDelegate.overrides != overrides;
   }
 }
 

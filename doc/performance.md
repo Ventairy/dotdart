@@ -8,6 +8,9 @@ application does less work while rendering.
 - Source XML and JSON are not parsed at runtime.
 - Geometry is emitted as reusable Dart `Path` data.
 - Generated painters reuse paints and static geometry where possible.
+- Animated Lottie paths use build-time control-point calculations and direct
+  interpolation into reusable paths. Repeated frames and unchanged held poses
+  skip rebuilding geometry; compound paths update only when a source path changes.
 - Lottie text painters retain their layout between frames, and adjacent
   constant keyframes are compacted before source is emitted.
 - Sequential trim-path lengths are computed once instead of being added again

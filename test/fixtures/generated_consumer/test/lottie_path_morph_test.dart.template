@@ -1,0 +1,174 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:dotdart_generated_consumer_fixture/gen/lotties.g.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  for (final progress in [0.0, 0.125, 0.25, 0.5, 0.75, 1.0, 0.25]) {
+    testWidgets('when seeking an animated path to $progress, it should match interpolated Bézier geometry', (
+      tester,
+    ) async {
+      final actual = await _MorphPixels.capture(tester, $Lotties.pathMorph(width: 100, progress: progress));
+      final offset = progress <= 0.5 ? progress * 80 : (1 - progress) * 80;
+      final expected = await _MorphPixels.capture(
+        tester,
+        CustomPaint(size: const Size(100, 100), painter: _ReferenceMorph(offset)),
+      );
+      expect(actual, expected);
+    });
+  }
+
+  for (final progress in [0.25, 0.5, 0.75]) {
+    testWidgets('when a path uses holds and easing at $progress, it should preserve its curve and discontinuity', (
+      tester,
+    ) async {
+      final actual = await _MorphPixels.capture(tester, $Lotties.pathMorphHold(width: 100, progress: progress));
+      final offset = progress < 0.5 ? 0.0 : 40 * (1 - const Cubic(0.42, 0, 1, 1).transform((progress - 0.5) * 2));
+      final expected = await _MorphPixels.capture(
+        tester,
+        CustomPaint(size: const Size(100, 100), painter: _ReferenceMorph(offset)),
+      );
+      expect(actual, expected);
+    });
+  }
+
+  for (final progress in [0.0, 0.5, 0.0]) {
+    testWidgets('when a compound path seeks to $progress, it should update contours and retain its even-odd hole', (
+      tester,
+    ) async {
+      final bytes = await _MorphPixels.capture(tester, $Lotties.pathMorphCompound(width: 100, progress: progress));
+      expect(
+        _MorphPixels.samples(bytes, [(15, 20), (25, 20), (55, 20)]),
+        progress == 0
+            ? [
+                [255, 0, 0, 255],
+                [0, 0, 0, 0],
+                [0, 0, 0, 0],
+              ]
+            : [
+                [0, 0, 0, 0],
+                [255, 0, 0, 255],
+                [255, 0, 0, 255],
+              ],
+      );
+    });
+
+    testWidgets('when nested path geometry seeks to $progress, it should preserve transforms and paint ownership', (
+      tester,
+    ) async {
+      final bytes = await _MorphPixels.capture(tester, $Lotties.pathMorphHierarchy(width: 100, progress: progress));
+      expect(
+        _MorphPixels.samples(bytes, [(15, 20), (35, 20), (75, 75)]),
+        progress == 0
+            ? [
+                [0, 0, 255, 255],
+                [0, 0, 0, 0],
+                [255, 0, 0, 255],
+              ]
+            : [
+                [0, 0, 0, 0],
+                [0, 0, 255, 255],
+                [255, 0, 0, 255],
+              ],
+      );
+    });
+  }
+
+  testWidgets('when a precomposition is reused at different times, it should evaluate each local path frame', (
+    tester,
+  ) async {
+    final bytes = await _MorphPixels.capture(tester, $Lotties.pathMorphPrecomp(width: 100, progress: 0.25));
+    expect(_MorphPixels.samples(bytes, [(35, 20), (15, 20), (45, 70), (25, 70)]), [
+      [255, 0, 0, 255],
+      [0, 0, 0, 0],
+      [255, 0, 0, 255],
+      [0, 0, 0, 0],
+    ]);
+  });
+
+  testWidgets('when an open path animates, it should leave its closing edge unpainted', (tester) async {
+    final bytes = await _MorphPixels.capture(tester, $Lotties.pathMorphOpen(width: 100, progress: 0.5));
+    expect(_MorphPixels.samples(bytes, [(50, 20), (70, 20)]), [
+      [0, 0, 0, 0],
+      [0, 0, 255, 255],
+    ]);
+  });
+
+  testWidgets('when repeated poses use non-linear easing, it should render them as static geometry', (tester) async {
+    final actual = await _MorphPixels.capture(tester, $Lotties.pathMorphConstant(width: 100, progress: 0.5));
+    final expected = await _MorphPixels.capture(
+      tester,
+      CustomPaint(size: const Size(100, 100), painter: const _ReferenceMorph(0)),
+    );
+    expect(actual, expected);
+  });
+
+  testWidgets('when two widgets use independent progress, it should keep their path caches separate', (tester) async {
+    final bytes = await _MorphPixels.capture(
+      tester,
+      Stack(
+        children: [
+          $Lotties.pathMorph(width: 100, progress: 0),
+          Transform.translate(offset: const Offset(0, 50), child: $Lotties.pathMorph(width: 100, progress: 0.5)),
+        ],
+      ),
+    );
+    expect(_MorphPixels.samples(bytes, [(15, 20), (55, 20), (15, 70), (55, 70)]), [
+      [255, 0, 0, 255],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [255, 0, 0, 255],
+    ]);
+  });
+}
+
+class _MorphPixels {
+  static Future<Uint8List> capture(WidgetTester tester, Widget child) async {
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: SizedBox(width: 100, height: 100, child: child),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return (await tester.runAsync(() async {
+      final image = await (key.currentContext!.findRenderObject()! as RenderRepaintBoundary).toImage();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      image.dispose();
+      return bytes!.buffer.asUint8List();
+    }))!;
+  }
+
+  static List<List<int>> samples(Uint8List bytes, List<(int, int)> points) => [
+    for (final (x, y) in points) bytes.sublist((y * 100 + x) * 4, (y * 100 + x) * 4 + 4),
+  ];
+}
+
+class _ReferenceMorph extends CustomPainter {
+  const _ReferenceMorph(this.offset);
+  final double offset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(10 + offset, 10)
+      ..cubicTo(15 + offset, offset / 2, 25 + offset, offset / 2, 30 + offset, 10)
+      ..cubicTo(30 + offset, 10, 30 + offset, 30, 30 + offset, 30)
+      ..cubicTo(30 + offset, 30, 10 + offset, 30, 10 + offset, 30)
+      ..cubicTo(10 + offset, 30, 10 + offset, 10, 10 + offset, 10)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFFFF0000));
+  }
+
+  @override
+  bool shouldRepaint(_ReferenceMorph oldDelegate) => offset != oldDelegate.offset;
+}

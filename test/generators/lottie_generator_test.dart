@@ -12,6 +12,56 @@ import 'package:dotdart/src/parsers/lottie_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final (asset, expectations) in [
+    (
+      'path_morph',
+      [
+        contains('Path __path0_0_0(double frame)'),
+        contains('canvas.drawPath(__path0_0_0(frame)'),
+        isNot(contains('__path0_0_0Revision')),
+        isNot(contains('const Cubic(')),
+      ],
+    ),
+    (
+      'path_morph_constant',
+      [
+        contains('static final Path __path0_0_0 = Path()'),
+        isNot(contains('__path0_0_0Frame')),
+        isNot(contains('_transformCurve')),
+      ],
+    ),
+    ('path_morph_hold', [contains('_transformCurve0(progress)'), contains('const Cubic(0.42, 0, 1, 1)')]),
+    (
+      'path_morph_compound',
+      [
+        contains('_compoundFillPath0_0Revision0 == __path0_0_0Revision'),
+        contains('Path _compoundFillPath0_0(double frame)'),
+        contains('static final RRect _compoundFillPath0_0RRect1'),
+        contains('..addPath(__path0_0_0Value, Offset.zero)'),
+        contains('..fillType = PathFillType.evenOdd'),
+      ],
+    ),
+    (
+      'path_morph_hierarchy',
+      [
+        contains('Path _treePaintPath0_1_2(double frame)'),
+        contains('static final Float64List _treePaintPath'),
+        contains('matrix4: _treePaintPath'),
+        contains('__treePath0_2_0(frame)'),
+        contains('Path _treePaintPath0_1_3(double frame) => _treePaintPath0_1_2(frame);'),
+        contains('__treePath0_2_0Value, Offset.zero'),
+      ],
+    ),
+    ('path_morph_precomp', [contains('(frame - -30) / 2'), contains('Path __path2_0_0(double frame)')]),
+  ]) {
+    test('when generating $asset, it should update geometry through its supported paint and timing path', () {
+      final animation = LottieParser.parse(
+        File('test/fixtures/generated_consumer/assets/lotties/$asset.json').readAsStringSync(),
+      ).animation;
+      final output = LottieGenerator(animation, 'assets/lotties/$asset.json').generateWidgetClass();
+      expect(output, allOf(expectations));
+    });
+  }
   const animation = LottieAnimation(
     width: 200,
     height: 200,

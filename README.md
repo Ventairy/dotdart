@@ -196,6 +196,12 @@ Automatic playback pauses when either the platform's Reduce Motion preference
 or disabled-animation setting is active. `respectDisableAnimations: false`
 opts out of both preferences.
 
+Supported Lottie paths can animate their vertices and Bézier handles when
+all keyframes have the same vertex count and open or closed status. Generated
+painters reuse path storage and interpolate directly, without parsing JSON or
+creating coordinate lists during playback. Animated paths combined with trim
+paths are not supported.
+
 Supported trim paths preserve animated start, end, and offset values in the
 default drawing direction, including parallel and sequential handling when one
 shape group contains multiple paths.

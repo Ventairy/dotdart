@@ -76,6 +76,166 @@ const _minimalLottie = '''
 
 void main() {
   group('LottieParser', () {
+    test('when a path has animated geometry, it should preserve its poses without warnings', () {
+      final result = LottieParser.parse(
+        File('test/fixtures/generated_consumer/assets/lotties/path_morph.json').readAsStringSync(),
+      );
+      expect(result.warnings, isEmpty);
+    });
+
+    test('when path poses use modern start values, it should retain their timing and handles', () {
+      final fixture = _AnimatedPathFixture();
+      final path = fixture.parse();
+      expect(
+        [
+          path.keyframes.length,
+          path.keyframes[1].timing.time,
+          path.keyframes[1].start.vertices.first,
+          path.keyframes.first.start.outTangents.first,
+          path.hasAnimatedGeometry,
+        ],
+        [
+          3,
+          30,
+          [50, 10],
+          [5, -10],
+          true,
+        ],
+      );
+    });
+
+    test('when a legacy terminal frame has no pose, it should use the previous end pose', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.frame(1)['e'] = fixture.frame(2).remove('s');
+      expect(fixture.parse().keyframes.last.start.vertices.first, [10, 10]);
+    });
+
+    test('when a hold terminal frame has no pose, it should retain the previous start pose', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.frame(1)['h'] = 1;
+      fixture.frame(2).remove('s');
+      expect(fixture.parse().keyframes.last.start.vertices.first, [50, 10]);
+    });
+
+    test('when both next start and legacy end exist, it should prefer the next start pose', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.frame(0)['e'] = fixture.frame(0)['s'];
+      expect(fixture.parse().keyframes.first.end.vertices.first, [50, 10]);
+    });
+
+    test('when a shape has hold and array easing values, it should preserve both', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.frame(0)['h'] = 1;
+      fixture.frame(0)['o'] = {
+        'x': [0.25],
+        'y': [-0.5],
+      };
+      fixture.frame(0)['i'] = {
+        'x': [0.75],
+        'y': [1.5],
+      };
+      final timing = fixture.parse().keyframes.first.timing;
+      expect((timing.hold, timing.outX, timing.outY, timing.inX, timing.inY), (true, 0.25, -0.5, 0.75, 1.5));
+    });
+
+    for (final field in ['v', 'i', 'o']) {
+      test('when a path has a malformed $field point, it should report its property location', () {
+        final fixture = _AnimatedPathFixture();
+        (fixture.pose(0)[field]! as List<Object?>)[0] = [1, 'invalid'];
+        expect(
+          fixture.parse,
+          throwsA(
+            isA<DotdartInvalidLottieException>().having(
+              (error) => error.message,
+              'location',
+              contains('ks.k[0].s[0].$field[0][1]'),
+            ),
+          ),
+        );
+      });
+    }
+
+    test('when a path has mismatched handle counts, it should reject the malformed geometry', () {
+      final fixture = _AnimatedPathFixture();
+      (fixture.pose(0)['i']! as List<Object?>).removeLast();
+      expect(fixture.parse, throwsA(isA<DotdartInvalidLottieException>()));
+    });
+
+    for (final change in ['vertex count', 'closed flag']) {
+      test('when path keyframes change the $change, it should reject the unsupported topology', () {
+        final fixture = _AnimatedPathFixture();
+        if (change == 'closed flag') {
+          fixture.pose(1)['c'] = false;
+        } else {
+          for (final field in ['v', 'i', 'o']) {
+            (fixture.pose(1)[field]! as List<Object?>).removeLast();
+          }
+        }
+        expect(
+          fixture.parse,
+          throwsA(
+            isA<DotdartUnsupportedFeatureException>().having((error) => error.message, 'location', contains('ks.k[1]')),
+          ),
+        );
+      });
+    }
+
+    for (final time in [0, -1]) {
+      test('when path keyframe times are not increasing ($time), it should reject the timeline', () {
+        final fixture = _AnimatedPathFixture();
+        fixture.frame(1)['t'] = time;
+        expect(
+          fixture.parse,
+          throwsA(
+            isA<DotdartInvalidLottieException>().having((error) => error.message, 'location', contains('ks.k[1].t')),
+          ),
+        );
+      });
+    }
+
+    test('when a terminal path pose is missing, it should report the missing endpoint', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.frame(2).remove('s');
+      expect(
+        fixture.parse,
+        throwsA(
+          isA<DotdartInvalidLottieException>().having((error) => error.message, 'location', contains('ks.k[2].s')),
+        ),
+      );
+    });
+
+    test('when an animated path is trimmed, it should reject stale path metrics', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.items.add({
+        'ty': 'tm',
+        's': {'k': 0},
+        'e': {'k': 100},
+        'o': {'k': 0},
+        'm': 1,
+      });
+      expect(
+        fixture.parse,
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (error) => error.message,
+            'feature',
+            contains('animated path geometry with a trim path'),
+          ),
+        ),
+      );
+    });
+
+    test('when an easing X handle is outside its domain, it should report the exact handle', () {
+      final fixture = _AnimatedPathFixture();
+      fixture.frame(0)['o'] = {'x': 1.1, 'y': 0};
+      expect(
+        fixture.parse,
+        throwsA(
+          isA<DotdartInvalidLottieException>().having((error) => error.message, 'location', contains('ks.k[0].o.x')),
+        ),
+      );
+    });
+
     test('when nested groups own parent and child paints, it should preserve the original shape hierarchy', () {
       final result = LottieParser.parse(
         File('test/fixtures/generated_consumer/assets/lotties/nested_shape_paints.json').readAsStringSync(),
@@ -1889,4 +2049,29 @@ void main() {
       expect(ex.toString(), contains('gradient not supported'));
     });
   });
+}
+
+class _AnimatedPathFixture {
+  final _root = jsonDecode(
+    File('test/fixtures/generated_consumer/assets/lotties/path_morph.json').readAsStringSync(),
+  ) as Map<String, Object?>;
+
+  List<Object?> get items {
+    final layer = (_root['layers']! as List<Object?>).single! as Map<String, Object?>;
+    final group = (layer['shapes']! as List<Object?>).single! as Map<String, Object?>;
+    return group['it']! as List<Object?>;
+  }
+
+  Map<String, Object?> frame(int index) {
+    final shape = items.first! as Map<String, Object?>;
+    final property = shape['ks']! as Map<String, Object?>;
+    return (property['k']! as List<Object?>)[index]! as Map<String, Object?>;
+  }
+
+  Map<String, Object?> pose(int index) => (frame(index)['s']! as List<Object?>).single! as Map<String, Object?>;
+
+  LottiePath parse() =>
+      LottieParser.parse(jsonEncode(_root)).animation.layers.single.shapeGroups.single.items
+          .whereType<LottiePath>()
+          .single;
 }
