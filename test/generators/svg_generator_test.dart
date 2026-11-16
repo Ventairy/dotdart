@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dotdart/src/generators/svg_generator.dart';
 import 'package:dotdart/src/models/svg_document.dart';
 import 'package:dotdart/src/models/svg_element.dart';
+import 'package:dotdart/src/models/svg_image_pattern.dart';
 import 'package:dotdart/src/models/svg_style.dart';
 import 'package:dotdart/src/parsers/lottie_parser.dart';
 import 'package:dotdart/src/parsers/svg/svg_parser.dart';
@@ -10,6 +12,40 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SvgGenerator', () {
+    test('when an SVG embeds a megabyte image, it should preserve its bytes without a large integer expression', () {
+      final bytes = List<int>.generate(1024 * 1024, (index) => index % 256);
+      final document = SvgDocument(
+        viewBox: const SvgViewBox(minX: 0, minY: 0, width: 100, height: 100),
+        children: const [SvgRect(x: 0, y: 0, width: 100, height: 100, style: SvgStyle(fillServerId: 'map'))],
+        patterns: {
+          'map': SvgImagePattern(
+            bytes: bytes,
+            pixelWidth: 100,
+            pixelHeight: 100,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            imageX: 0,
+            imageY: 0,
+            imageWidth: 1,
+            imageHeight: 1,
+            objectBoundingBox: true,
+          ),
+        },
+      );
+      final code = SvgGenerator(document, 'assets/icons/map.svg').generateWidgetClass();
+      final encoded = RegExp(r"MemoryImage\(base64Decode\('([^']+)'\)\)").firstMatch(code)?.group(1);
+      expect(
+        {
+          'bytes': encoded == null ? null : base64Decode(encoded),
+          'compact': code.length < 2 * bytes.length,
+          'integerExpression': code.contains('Uint8List.fromList('),
+        },
+        {'bytes': bytes, 'compact': true, 'integerExpression': false},
+      );
+    });
+
     test('when a radial fill ends in transparency, it should bound rectangular draws to the transformed circle', () {
       final code = SvgGenerator(
         SvgParser.parse(

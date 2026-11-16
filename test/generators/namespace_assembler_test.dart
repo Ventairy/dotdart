@@ -6,6 +6,27 @@ import 'package:dotdart/src/generators/naming.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final requiresEmbeddedImages in [false, true]) {
+    test('when embedded SVG images are $requiresEmbeddedImages, it should import decoding only when needed', () {
+      final source = NamespaceAssembler(
+        namespaceName: 'Icons',
+        folderSegment: 'icons',
+        assets: [
+          GeneratedAssetSpec(
+            sourcePath: 'assets/icons/map.svg',
+            accessorName: 'map',
+            widgetClassName: '_Map',
+            params: [const AccessorParam(name: 'key', type: 'Key?')],
+            widgetSource: 'class _Map {}',
+            assetType: DotdartAssetType.svg,
+            requiresEmbeddedImages: requiresEmbeddedImages,
+          ),
+        ],
+      ).assemble();
+      expect(source.contains("import 'dart:convert' show base64Decode;"), requiresEmbeddedImages);
+    });
+  }
+
   for (final requiresRadialGradient in [false, true]) {
     test('when radial shaders are $requiresRadialGradient, it should import their constructor only when needed', () {
       final source = NamespaceAssembler(

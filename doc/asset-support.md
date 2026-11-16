@@ -126,6 +126,8 @@ Supported:
 - static text layers, including point text and paragraph boxes
 - static, non-inverted, fully opaque additive masks with zero expansion
 - transforms, opacity, hold keyframes, and cubic Bézier easing
+- animated path vertices and Bézier handles with matching vertex counts and
+  open or closed status across keyframes
 - one static or animated trim-path modifier per shape group, including start,
   end, offset, wraparound, default shape direction, and parallel or sequential
   multiple-shape modes
@@ -172,7 +174,8 @@ Not supported:
 - partial group opacity across multiple draws or nested paint stacks that require
   atomic compositing; flatten or precompose the affected group before exporting
 - multiple trim-path modifiers in one shape group
-- trim paths combined with reversed shape direction
+- path keyframes that change the vertex count or open or closed status
+- trim paths combined with animated path geometry or reversed shape direction
 
 Unsupported layer and shape types that can be skipped safely produce build
 warnings. Features that would change rendering semantics fail generation.

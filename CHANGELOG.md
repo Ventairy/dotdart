@@ -1,3 +1,18 @@
+## 0.12.2
+
+- Support animated Lottie path geometry with matching vertex counts and open
+  or closed status across keyframes. Preserve holds, easing, nested paints,
+  and precomposition timing without a runtime Lottie renderer.
+- Generate path interpolation as direct arithmetic, reuse each painter's paths,
+  and skip repeated frames and unchanged held geometry. Static paths keep their
+  shared cached geometry.
+- Report invalid path geometry and unsupported topology changes with their
+  source property locations. Animated paths combined with trim paths remain
+  unsupported.
+
+- Keep embedded SVG image bytes in compact encoded literals, avoiding excessive
+  debug compiler memory usage for large PNGs.
+
 ## 0.12.1
 
 - Support `build` 5 and the latest `build_runner`, while retaining `build` 4

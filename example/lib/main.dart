@@ -114,6 +114,11 @@ class _DotdartExamplePageState extends State<DotdartExamplePage> with WidgetsBin
           ),
           const SizedBox(height: 16),
           _ExampleCard(
+            label: 'Animated Lottie path geometry',
+            child: $Lotties.pathMorph(width: 100, playback: LottiePlayback.loop),
+          ),
+          const SizedBox(height: 16),
+          _ExampleCard(
             label: 'Animated Lottie trim path',
             child: $Lotties.trimPath(
               width: 100,

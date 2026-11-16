@@ -68,6 +68,9 @@ class NamespaceAssembler {
     if (types.contains(DotdartAssetType.lottie) || types.contains(DotdartAssetType.raster)) {
       b.writeln("import 'dart:async';");
     }
+    if (assets.any((asset) => asset.requiresEmbeddedImages)) {
+      b.writeln("import 'dart:convert' show base64Decode;");
+    }
     if (types.contains(DotdartAssetType.svg) || types.contains(DotdartAssetType.lottie)) {
       b.writeln("import 'dart:math' as math;");
     }

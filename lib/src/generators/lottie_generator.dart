@@ -12,6 +12,7 @@ import '../models/lottie_shape.dart';
 import '../models/lottie_shape_enums.dart';
 
 import 'accessor_param.dart';
+import 'lottie_path_generator.dart';
 import 'naming.dart';
 
 /// Generates a self-contained Dart widget file from a [LottieAnimation] model.
@@ -23,6 +24,8 @@ class LottieGenerator {
 
   /// The original asset path (e.g. `assets/lottie/swipe_up_onboarding.json`).
   final String sourcePath;
+
+  late final List<_CurveEntry> _curves = _extractCurves();
 
   /// Returns the constructor parameters of the generated widget.
   ///
@@ -376,6 +379,18 @@ class LottieGenerator {
           if (!_isDefinitelyEmptyGroup(group))
             for (final item in group.items)
               if (item case final LottieTrimPath trim) ...[trim.start, trim.end, trim.offset],
+        for (final path in _layerShapes(layer).whereType<LottiePath>())
+          if (path.hasAnimatedGeometry)
+            LottieAnimatedScalar(
+              animated: true,
+              keyframes: [
+                for (final frame in path.keyframes)
+                  if (frame.start.hasSameGeometry(frame.end))
+                    LottieScalarKeyframe(time: frame.timing.time, start: 0, end: 0, hold: true)
+                  else
+                    frame.timing,
+              ],
+            ),
       ];
       for (final property in properties) {
         if (property == null || !_hasAnimatedValue(property)) continue;
@@ -594,7 +609,7 @@ class LottieGenerator {
   void _writePainterClass(StringBuffer b, _CustomizationPlan customizations) {
     final className = widgetClassName;
     final baseName = _baseName;
-    final curves = _extractCurves();
+    final curves = _curves;
     final eraseEntries = _eraseEntries();
     final activeMatteModes = _activeMatteModes();
     b.writeln('class _$baseName' + 'Painter extends CustomPainter {');
@@ -918,6 +933,7 @@ class LottieGenerator {
                 '_treePath${layerIdx}_${entry.value}_$itemIndex',
                 item,
                 pathsByFingerprint,
+                trackRevision: true,
               );
             }
           }
@@ -931,7 +947,17 @@ class LottieGenerator {
           var shapeIndex = 0;
           for (final item in group.items) {
             if (item is LottiePath && hasRenderablePaint) {
-              _writeSinglePath(b, layerIdx, groupIdx, shapeIndex, item, pathsByFingerprint);
+              _writeSinglePath(
+                b,
+                layerIdx,
+                groupIdx,
+                shapeIndex,
+                item,
+                pathsByFingerprint,
+                trackRevision:
+                    _canUseCompoundFill(fill: parts.fill, shapes: parts.shapes) ||
+                    _canUseCompoundStroke(fill: parts.fill, stroke: parts.stroke, shapes: parts.shapes),
+              );
             }
             if (item is! LottieFill &&
                 item is! LottieStroke &&
@@ -1033,19 +1059,31 @@ class LottieGenerator {
     int groupIdx,
     int itemIdx,
     LottiePath path,
-    Map<String, String> pathsByFingerprint,
-  ) {
+    Map<String, String> pathsByFingerprint, {
+    bool trackRevision = false,
+  }) {
     final name = '_path${layerIdx}_${groupIdx}_$itemIdx';
-    _writePathDeclaration(b, name, path, pathsByFingerprint);
+    _writePathDeclaration(b, name, path, pathsByFingerprint, trackRevision: trackRevision);
   }
 
   void _writePathDeclaration(
     StringBuffer b,
     String name,
     LottiePath path,
-    Map<String, String> pathsByFingerprint,
-  ) {
+    Map<String, String> pathsByFingerprint, {
+    bool trackRevision = false,
+  }) {
     final declarationName = '_$name';
+    if (path.hasAnimatedGeometry) {
+      const LottiePathGenerator().write(
+        b,
+        name: declarationName,
+        path: path,
+        trackRevision: trackRevision,
+        easing: _pathEasingExpression,
+      );
+      return;
+    }
     final fingerprint = _pathFingerprint(path);
     final existing = pathsByFingerprint[fingerprint];
     if (existing != null) {
@@ -1084,6 +1122,26 @@ class LottieGenerator {
       b.writeln('  ;');
     }
     b.writeln();
+  }
+
+  String _pathReference(String name, LottiePath path) => path.hasAnimatedGeometry ? '$name(frame)' : name;
+
+  String _pathEasingExpression(LottieScalarKeyframe timing) {
+    if (timing.outX == null ||
+        timing.outY == null ||
+        timing.inX == null ||
+        timing.inY == null ||
+        _isIdentityEasing(timing)) {
+      return 'progress';
+    }
+    final index = _curveIndexFor(
+      _curves,
+      outX: timing.outX!,
+      outY: timing.outY!,
+      inX: timing.inX!,
+      inY: timing.inY!,
+    );
+    return '_transformCurve$index(progress)';
   }
 
   String _pathFingerprint(LottiePath path) {
@@ -1144,7 +1202,7 @@ class LottieGenerator {
         final compoundFill = _canUseCompoundFill(fill: parts.fill, shapes: parts.shapes);
         final compoundStroke = _canUseCompoundStroke(fill: parts.fill, stroke: parts.stroke, shapes: parts.shapes);
         if (parts.trim != null) {
-          _writeStaticCompoundPath(
+          _writeCompoundPathDeclaration(
             b,
             name: '_trimSourcePath${layerIndex}_$groupIndex',
             shapes: parts.shapes,
@@ -1166,7 +1224,7 @@ class LottieGenerator {
           continue;
         }
         if (compoundFill) {
-          _writeStaticCompoundPath(
+          _writeCompoundPathDeclaration(
             b,
             name: '_compoundFillPath${layerIndex}_$groupIndex',
             shapes: parts.shapes,
@@ -1176,7 +1234,7 @@ class LottieGenerator {
           );
         }
         if (compoundStroke) {
-          _writeStaticCompoundPath(
+          _writeCompoundPathDeclaration(
             b,
             name: '_compoundStrokePath${layerIndex}_$groupIndex',
             shapes: parts.shapes,
@@ -1189,7 +1247,7 @@ class LottieGenerator {
     }
   }
 
-  void _writeStaticCompoundPath(
+  void _writeCompoundPathDeclaration(
     StringBuffer b, {
     required String name,
     required List<LottieShape> shapes,
@@ -1197,25 +1255,69 @@ class LottieGenerator {
     required int groupIndex,
     required bool evenOdd,
   }) {
-    b.writeln('  static final Path $name = Path()');
+    final dependencies = <String>[
+      for (var index = 0; index < shapes.length; index++)
+        if (shapes[index] case final LottiePath path when path.hasAnimatedGeometry)
+          '__path${layerIndex}_${groupIndex}_$index',
+    ];
+    if (dependencies.isNotEmpty) {
+      for (var index = 0; index < shapes.length; index++) {
+        final shape = shapes[index];
+        if (shape is LottieRect) b.writeln('  static final RRect ${name}RRect$index = ${_rrectExpression(shape)};');
+        if (shape is LottieEllipse) {
+          b.writeln('  static final Rect ${name}Rect$index = ${_ellipseRectExpression(shape)};');
+        }
+      }
+      _writeCompoundCacheStart(b, name: name, dependencies: dependencies);
+    } else {
+      b.writeln('  static final Path $name = Path()');
+    }
     if (evenOdd) {
       b.writeln('    ..fillType = PathFillType.evenOdd');
     }
     for (var shapeIndex = 0; shapeIndex < shapes.length; shapeIndex++) {
       final shape = shapes[shapeIndex];
       if (shape is LottieRect) {
-        b.writeln('    ..addRRect(${_rrectExpression(shape)})');
+        b.writeln('    ..addRRect(${dependencies.isEmpty ? _rrectExpression(shape) : '${name}RRect$shapeIndex'})');
       } else if (shape is LottieEllipse) {
-        b.writeln('    ..addOval(${_ellipseRectExpression(shape)})');
+        b.writeln('    ..addOval(${dependencies.isEmpty ? _ellipseRectExpression(shape) : '${name}Rect$shapeIndex'})');
       } else if (shape is LottiePath) {
-        b.writeln('    ..addPath(__path${layerIndex}_${groupIndex}_$shapeIndex, Offset.zero)');
+        final source = '__path${layerIndex}_${groupIndex}_$shapeIndex';
+        b.writeln('    ..addPath(${shape.hasAnimatedGeometry ? '${source}Value' : source}, Offset.zero)');
       }
     }
     b.writeln('  ;');
+    if (dependencies.isNotEmpty) _writeCompoundCacheEnd(b, name: name);
     b.writeln();
   }
 
+  void _writeCompoundCacheStart(StringBuffer b, {required String name, required List<String> dependencies}) {
+    b.writeln('  final Path ${name}Value = Path();');
+    for (var index = 0; index < dependencies.length; index++) {
+      b.writeln('  int ${name}Revision$index = -1;');
+    }
+    b.writeln('  Path $name(double frame) {');
+    for (final dependency in dependencies) {
+      b.writeln('    $dependency(frame);');
+    }
+    final unchanged = <String>[
+      for (var index = 0; index < dependencies.length; index++)
+        '${name}Revision$index == ${dependencies[index]}Revision',
+    ].join(' && ');
+    b.writeln('    if ($unchanged) return ${name}Value;');
+    for (var index = 0; index < dependencies.length; index++) {
+      b.writeln('    ${name}Revision$index = ${dependencies[index]}Revision;');
+    }
+    b.writeln('    ${name}Value..reset()');
+  }
+
+  void _writeCompoundCacheEnd(StringBuffer b, {required String name}) {
+    b.writeln('    return ${name}Value;');
+    b.writeln('  }');
+  }
+
   void _writeHierarchyCompoundPathData(StringBuffer b, int layerIndex, LottieGroup shapeTree) {
+    final animatedPaintPaths = <String, String>{};
     final groupIds = _hierarchyGroupIds(shapeTree);
     final transparentGroups = _transparentHierarchyGroups(shapeTree);
     for (final entry in groupIds.entries) {
@@ -1225,12 +1327,65 @@ class LottieGenerator {
           LottieFill(:final fillRule) => fillRule,
           _ => 1,
         };
-        b.writeln('  static final Path _treePaintPath${layerIndex}_${entry.value}_${paint.pathIndex} = Path()');
-        if (fillRule == 2) b.writeln('    ..fillType = PathFillType.evenOdd');
-        for (final geometry in paint.geometries) {
+        final name = '_treePaintPath${layerIndex}_${entry.value}_${paint.pathIndex}';
+        final dynamicGeometries = paint.geometries
+            .where(
+              (geometry) => geometry.shape is LottiePath && (geometry.shape as LottiePath).hasAnimatedGeometry,
+            )
+            .toList();
+        final dependencies = <String>[
+          for (final geometry in dynamicGeometries) '__treePath${layerIndex}_${geometry.groupId}_${geometry.itemIndex}',
+        ];
+        if (dependencies.isEmpty) {
+          b.writeln('  static final Path $name = Path()');
+          if (fillRule == 2) b.writeln('    ..fillType = PathFillType.evenOdd');
+          for (final geometry in paint.geometries) {
+            _writeHierarchyGeometry(b, layerIndex, geometry);
+          }
+          b.writeln('  ;');
+          b.writeln();
+          continue;
+        }
+        final fingerprint =
+            '$fillRule|${paint.geometries.map((geometry) => '${geometry.groupId}:${geometry.itemIndex}:${_matrix4Literal(geometry.transform)}').join('|')}';
+        final shared = animatedPaintPaths[fingerprint];
+        if (shared != null) {
+          b.writeln('  Path $name(double frame) => $shared(frame);');
+          b.writeln();
+          continue;
+        }
+        animatedPaintPaths[fingerprint] = name;
+        // Cache static contours and matrices once. Dynamic addPath calls do not
+        // allocate a matrix or a temporary Path on each repaint.
+        for (var index = 0; index < paint.geometries.length; index++) {
+          final geometry = paint.geometries[index];
+          if (dynamicGeometries.contains(geometry)) {
+            if (!_isIdentityTransform(geometry.transform)) {
+              b.writeln(
+                '  static final Float64List ${name}Matrix$index = Float64List.fromList(${_matrix4Literal(geometry.transform)});',
+              );
+            }
+            continue;
+          }
+          b.writeln('  static final Path ${name}Static$index = Path()');
           _writeHierarchyGeometry(b, layerIndex, geometry);
+          b.writeln('  ;');
+        }
+        _writeCompoundCacheStart(b, name: name, dependencies: dependencies.toSet().toList());
+        if (fillRule == 2) b.writeln('    ..fillType = PathFillType.evenOdd');
+        for (var index = 0; index < paint.geometries.length; index++) {
+          final geometry = paint.geometries[index];
+          if (!dynamicGeometries.contains(geometry)) {
+            b.writeln('    ..addPath(${name}Static$index, Offset.zero)');
+            continue;
+          }
+          final matrix = _isIdentityTransform(geometry.transform) ? '' : ', matrix4: ${name}Matrix$index';
+          b.writeln(
+            '    ..addPath(__treePath${layerIndex}_${geometry.groupId}_${geometry.itemIndex}Value, Offset.zero$matrix)',
+          );
         }
         b.writeln('  ;');
+        _writeCompoundCacheEnd(b, name: name);
         b.writeln();
       }
     }
@@ -2187,7 +2342,11 @@ class LottieGenerator {
     double groupOpacity, {
     required _LottieRenderMode renderMode,
   }) {
-    final pathName = '_treePaintPath${layerIndex}_${groupId}_${entry.pathIndex}';
+    final name = '_treePaintPath${layerIndex}_${groupId}_${entry.pathIndex}';
+    final animated = entry.geometries.any(
+      (geometry) => geometry.shape is LottiePath && (geometry.shape as LottiePath).hasAnimatedGeometry,
+    );
+    final pathName = animated ? '$name(frame)' : name;
     final fillPaint = renderMode.fillPaint;
     final strokePaint = renderMode.strokePaint;
     switch (entry.paint) {
@@ -2386,6 +2545,7 @@ class LottieGenerator {
           layerIndex,
           groupIndex,
           shapeIndex,
+          shape,
           shapeFill,
           shapeStroke,
           customizations,
@@ -2780,7 +2940,12 @@ class LottieGenerator {
     double groupOpacity, {
     required _LottieRenderMode renderMode,
   }) {
-    final pathName = '_compoundFillPath${layerIndex}_$groupIndex';
+    final name = '_compoundFillPath${layerIndex}_$groupIndex';
+    final animated = _groupParts(_layers.firstWhere((entry) => entry.index == layerIndex).layer.shapeGroups[groupIndex])
+        .shapes
+        .whereType<LottiePath>()
+        .any((path) => path.hasAnimatedGeometry);
+    final pathName = animated ? '$name(frame)' : name;
     final paintName = 'compoundFillPaint$groupIndex';
     final opacity = _fmt(fill.opacity / 100 * groupOpacity);
     final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
@@ -2799,7 +2964,12 @@ class LottieGenerator {
     double groupOpacity, {
     required _LottieRenderMode renderMode,
   }) {
-    final pathName = '_compoundStrokePath${layerIndex}_$groupIndex';
+    final name = '_compoundStrokePath${layerIndex}_$groupIndex';
+    final animated = _groupParts(_layers.firstWhere((entry) => entry.index == layerIndex).layer.shapeGroups[groupIndex])
+        .shapes
+        .whereType<LottiePath>()
+        .any((path) => path.hasAnimatedGeometry);
+    final pathName = animated ? '$name(frame)' : name;
     final paintName = 'compoundStrokePaint$groupIndex';
     final cap = _lineCap(stroke.lineCap);
     final join = _lineJoin(stroke.lineJoin);
@@ -2895,6 +3065,7 @@ class LottieGenerator {
     int layerIndex,
     int groupIndex,
     int shapeIndex,
+    LottiePath path,
     LottieFill? fill,
     LottieStroke? stroke,
     _CustomizationPlan customizations,
@@ -2904,7 +3075,7 @@ class LottieGenerator {
     if (fill == null && stroke == null) return;
 
     final suffix = '${groupIndex}_$shapeIndex';
-    final pathName = '_path${layerIndex}_${groupIndex}_$shapeIndex';
+    final pathName = _pathReference('__path${layerIndex}_${groupIndex}_$shapeIndex', path);
     final fillPaintName = 'fillPaint$suffix';
     final strokePaintName = 'strokePaint$suffix';
     final evenOddPathName = 'path$suffix';
@@ -2916,11 +3087,11 @@ class LottieGenerator {
       if (fill.fillRule == 2) {
         b
           ..writeln('    $fillPaintName.style = PaintingStyle.fill;')
-          ..writeln('    final $evenOddPathName = Path.from(_$pathName);')
+          ..writeln('    final $evenOddPathName = Path.from($pathName);')
           ..writeln('    $evenOddPathName.fillType = PathFillType.evenOdd;')
           ..writeln('    canvas.drawPath($evenOddPathName, $fillPaintName);');
       } else {
-        b.writeln('    canvas.drawPath(_$pathName, $fillPaintName);');
+        b.writeln('    canvas.drawPath($pathName, $fillPaintName);');
       }
     }
 
@@ -2933,7 +3104,7 @@ class LottieGenerator {
         ..writeln(
           '    final $strokePaintName = ${renderMode.strokePaint}..color = $colorRef..strokeWidth = ${_fmt(stroke.width)}..strokeCap = $cap..strokeJoin = $join;',
         )
-        ..writeln('    canvas.drawPath(_$pathName, $strokePaintName);');
+        ..writeln('    canvas.drawPath($pathName, $strokePaintName);');
     }
   }
 

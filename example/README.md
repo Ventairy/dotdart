@@ -16,6 +16,12 @@ example app; the dotdart package root remains platform-independent.
 Generated libraries are committed so the example shown on pub.dev matches the
 repository release.
 
+## Animated paths
+
+The path geometry example uses `$Lotties.pathMorph` with continuous playback.
+Its vertices and Bézier handles animate directly in the generated painter;
+it does not load or parse the source JSON at runtime.
+
 ## Lookup by filename
 
 The example also renders an SVG through

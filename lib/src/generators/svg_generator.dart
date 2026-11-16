@@ -2,6 +2,7 @@
 // makes the code harder to read. This is a known false positive.
 // ignore_for_file: cascade_invocations, prefer_adjacent_string_concatenation
 
+import 'dart:convert';
 import 'dart:math' as math;
 
 import '../models/svg_document.dart';
@@ -1180,7 +1181,11 @@ class SvgGenerator {
     index = 0;
     for (final entry in document.patterns.entries) {
       final pattern = entry.value;
-      b.writeln('  static final MemoryImage _image$index = MemoryImage(Uint8List.fromList(${pattern.bytes}));');
+      // Keep compressed bytes as data. A large integer-list initializer makes
+      // debug-mode JIT compilation allocate a graph node for every byte.
+      b.writeln(
+        "  static final MemoryImage _image$index = MemoryImage(base64Decode('${base64Encode(pattern.bytes)}'));",
+      );
       final usages = _geometryFields.keys.where((element) => element.style.fillServerId == entry.key).toList();
       final twoAxis = _patternNeedsTwoAxisSizing(entry.key);
       final widths = <String>[];
