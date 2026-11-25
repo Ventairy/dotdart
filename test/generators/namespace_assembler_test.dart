@@ -27,8 +27,8 @@ void main() {
     });
   }
 
-  for (final requiresRadialGradient in [false, true]) {
-    test('when radial shaders are $requiresRadialGradient, it should import their constructor only when needed', () {
+  for (final requiresGradient in [false, true]) {
+    test('when radial shaders are $requiresGradient, it should import their constructor only when needed', () {
       final source = NamespaceAssembler(
         namespaceName: 'Icons',
         folderSegment: 'icons',
@@ -40,11 +40,11 @@ void main() {
             params: [const AccessorParam(name: 'key', type: 'Key?')],
             widgetSource: 'class _Icon {}',
             assetType: DotdartAssetType.svg,
-            requiresRadialGradient: requiresRadialGradient,
+            requiresGradient: requiresGradient,
           ),
         ],
       ).assemble();
-      expect(source.contains("import 'dart:ui' as ui show Gradient;"), requiresRadialGradient);
+      expect(source.contains("import 'dart:ui' as ui show Gradient;"), requiresGradient);
     });
   }
   for (final requiresTypedData in [false, true]) {

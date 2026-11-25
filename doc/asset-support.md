@@ -118,6 +118,10 @@ displaying many large icons with shadows.
 Supported:
 
 - shape layers with groups, paths, rectangles, ellipses, fills, and strokes
+- animated solid fill colors, and linear or centered radial gradient fills with
+  fixed endpoints and stop positions. Stop colors and transparency can change
+  together using shared easing. Put the gradient fill in the same group as its
+  shapes. Gradient fills keep their exported colors.
 - reusable precomposition layers, with sizes on their layers or assets
 - nested shape groups with inherited fills and strokes and animated positions
 - adjacent alpha and inverted-alpha mattes, where one layer's opacity reveals
@@ -164,7 +168,9 @@ Not supported:
 - image, audio, camera, or animated text layers
 - expressions, effects, precomposition time remapping, animated, translucent,
   expanded, inverted, or non-additive masks, luminance mattes, non-adjacent
-  matte references, chains of masked matte sources, gradients, or 3D layers
+  matte references, chains of masked matte sources, gradient strokes, or 3D layers
+- moving gradient endpoints or stops, off-center radial gradients, and animated
+  fill opacity. Use a layer opacity animation for a fade.
 - animated group scale, rotation, anchor, or opacity; move geometric transforms
   to layers, or flatten or precompose groups that animate opacity
 - trim paths spanning nested groups

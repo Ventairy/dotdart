@@ -6,6 +6,7 @@
 import 'dart:math' as math;
 
 import '../models/lottie_animation.dart';
+import '../models/lottie_fill_palette.dart';
 import '../models/lottie_keyframe.dart';
 import '../models/lottie_layer.dart';
 import '../models/lottie_shape.dart';
@@ -276,6 +277,7 @@ class LottieGenerator {
       final coloredShapes = <String, List<LottieShape>>{};
       for (final item in _layerShapes(layer)) {
         final key = switch (item) {
+          LottieFill() when item.palette?.geometry != null => null,
           LottieFill() => '${item.colorR},${item.colorG},${item.colorB},${item.colorA}',
           LottieStroke() => '${item.colorR},${item.colorG},${item.colorB},${item.colorA}',
           _ => null,
@@ -348,6 +350,17 @@ class LottieGenerator {
     return '$candidate$suffix';
   }
 
+  late final Map<LottieFill, int> _paletteIds = {
+    for (final entry in {
+      for (final layer in _renderLayers)
+        if (!_isDefinitelyEmptyLayer(layer))
+          ..._layerShapes(layer.layer).whereType<LottieFill>().where((fill) => fill.palette != null),
+    }.indexed)
+      entry.$2: entry.$1,
+  };
+
+  late final bool requiresGradient = _paletteIds.keys.any((fill) => fill.palette!.geometry != null);
+
   List<_CurveEntry> _extractCurves() {
     final curves = <_CurveEntry>[];
     final seen = <String>{};
@@ -356,6 +369,7 @@ class LottieGenerator {
       if (!_needsTransformEvaluation(entry)) continue;
       final layer = entry.layer;
       final properties = <LottieAnimatedScalar?>[
+        for (final fill in _layerShapes(layer).whereType<LottieFill>()) fill.palette?.timing,
         layer.opacity,
         layer.rotation,
         layer.positionX,
@@ -667,6 +681,9 @@ class LottieGenerator {
 
     // ── Keyframe data ──
     _writeKeyframeData(b, curves);
+    for (final entry in _paletteIds.entries) {
+      _writePalette(b, entry.key.palette!, entry.value);
+    }
 
     // ── Path data ──
     _writeGeometryData(b);
@@ -2352,8 +2369,8 @@ class LottieGenerator {
     switch (entry.paint) {
       case final LottieFill fill:
         final opacity = _fmt(fill.opacity / 100 * groupOpacity);
-        final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
-        b.writeln('    final treeFillPaint${groupId}_${entry.itemIndex} = $fillPaint..color = $colorRef;');
+        final setup = _fillSetup(fill, customizations, 'layerOpacity * $opacity');
+        b.writeln('    final treeFillPaint${groupId}_${entry.itemIndex} = $fillPaint$setup;');
         b.writeln('    canvas.drawPath($pathName, treeFillPaint${groupId}_${entry.itemIndex});');
       case final LottieStroke stroke:
         final opacity = _fmt(stroke.opacity / 100 * groupOpacity);
@@ -2908,9 +2925,9 @@ class LottieGenerator {
     final strokePaint = renderMode.strokePaint;
     if (fill != null) {
       final opacity = _fmt(fill.opacity / 100 * groupOpacity);
-      final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
+      final setup = _fillSetup(fill, customizations, 'layerOpacity * $opacity');
       b
-        ..writeln('    final trimFillPaint$suffix = $fillPaint..color = $colorRef;')
+        ..writeln('    final trimFillPaint$suffix = $fillPaint$setup;')
         ..writeln('    canvas.drawPath($pathName, trimFillPaint$suffix);');
     }
     if (stroke != null) {
@@ -2948,9 +2965,9 @@ class LottieGenerator {
     final pathName = animated ? '$name(frame)' : name;
     final paintName = 'compoundFillPaint$groupIndex';
     final opacity = _fmt(fill.opacity / 100 * groupOpacity);
-    final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
+    final setup = _fillSetup(fill, customizations, 'layerOpacity * $opacity');
 
-    b.writeln('    final $paintName = ${renderMode.fillPaint}..color = $colorRef;');
+    b.writeln('    final $paintName = ${renderMode.fillPaint}$setup;');
 
     b.writeln('    canvas.drawPath($pathName, $paintName);');
   }
@@ -3003,9 +3020,9 @@ class LottieGenerator {
 
     if (fill != null) {
       final opacity = _fmt(fill.opacity / 100 * groupOpacity);
-      final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
+      final setup = _fillSetup(fill, customizations, 'layerOpacity * $opacity');
       b
-        ..writeln('    final $fillPaintName = ${renderMode.fillPaint}..color = $colorRef;')
+        ..writeln('    final $fillPaintName = ${renderMode.fillPaint}$setup;')
         ..writeln('    canvas.drawRRect($bodyName, $fillPaintName);');
     }
 
@@ -3041,9 +3058,9 @@ class LottieGenerator {
     final strokePaintName = 'strokePaint$suffix';
     if (fill != null) {
       final opacity = _fmt(fill.opacity / 100 * groupOpacity);
-      final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
+      final setup = _fillSetup(fill, customizations, 'layerOpacity * $opacity');
       b
-        ..writeln('    final $fillPaintName = ${renderMode.fillPaint}..color = $colorRef;')
+        ..writeln('    final $fillPaintName = ${renderMode.fillPaint}$setup;')
         ..writeln('    canvas.drawOval($rectName, $fillPaintName);');
     }
 
@@ -3082,8 +3099,8 @@ class LottieGenerator {
 
     if (fill != null) {
       final opacity = _fmt(fill.opacity / 100 * groupOpacity);
-      final colorRef = _colorReference(fill, customizations, 'layerOpacity * $opacity');
-      b.writeln('    final $fillPaintName = ${renderMode.fillPaint}..color = $colorRef;');
+      final setup = _fillSetup(fill, customizations, 'layerOpacity * $opacity');
+      b.writeln('    final $fillPaintName = ${renderMode.fillPaint}$setup;');
       if (fill.fillRule == 2) {
         b
           ..writeln('    $fillPaintName.style = PaintingStyle.fill;')
@@ -3161,6 +3178,99 @@ class LottieGenerator {
     throw StateError('Missing extracted Lottie easing curve.');
   }
 
+  String _paletteReference(LottieFill fill) =>
+      '_palette${_paletteIds[fill]}${fill.palette!.poses.length > 1 ? '(frame)' : ''}';
+
+  String _fillSetup(LottieFill fill, _CustomizationPlan customizations, String opacity) {
+    if (fill.palette?.geometry != null) {
+      return '..shader = ${_paletteReference(fill)}..color = _dotdartApplyOpacity(const Color(0xffffffff), $opacity)';
+    }
+    final reset = requiresGradient ? '..shader = null' : '';
+    return '$reset..color = ${_colorReference(fill, customizations, opacity)}';
+  }
+
+  void _writePalette(StringBuffer b, LottieFillPalette palette, int id) {
+    final geometry = palette.geometry;
+    final name = '_palette$id';
+    String color(int argb, {bool implicitConst = false}) =>
+        '${implicitConst ? '' : 'const '}Color(0x${argb.toRadixString(16).padLeft(8, '0')})';
+    String paint(List<String> colors, {required bool constant}) {
+      if (geometry == null) return colors.single;
+      final start = 'const Offset(${_fmt(geometry.x)}, ${_fmt(geometry.y)})';
+      final dx = geometry.endX - geometry.x;
+      final dy = geometry.endY - geometry.y;
+      final constructor = geometry.radial
+          ? 'radial($start, ${_fmt(math.sqrt(dx * dx + dy * dy))}'
+          : 'linear($start, const Offset(${_fmt(geometry.endX)}, ${_fmt(geometry.endY)})';
+      final list = constant ? 'const [${colors.join(', ')}]' : '${name}Colors';
+      return 'ui.Gradient.$constructor, $list, const ${palette.stops})';
+    }
+
+    final type = geometry == null ? 'Color' : 'ui.Gradient';
+    final poses = palette.poses;
+    final samples = <String, String>{};
+    String sample(List<int> values) {
+      if (geometry == null) return color(values.single);
+      final expression = paint([for (final value in values) color(value, implicitConst: true)], constant: true);
+      return samples.putIfAbsent(expression, () => '${name}Stop${samples.length}');
+    }
+
+    if (poses.length == 1) {
+      final expression = paint([
+        for (final value in poses.single.start) color(value, implicitConst: true),
+      ], constant: geometry != null);
+      b.writeln('  static ${geometry == null ? 'const' : 'final'} $name = $expression;');
+      return;
+    }
+    var needsColorBuffer = false;
+    b.writeln('  $type $name(double frame) {');
+    b.writeln('    if (frame <= ${palette.timing.keyframes.first.time}) return ${sample(poses.first.start)};');
+    for (var index = 0; index < poses.length - 1; index++) {
+      final timing = palette.timing.keyframes[index];
+      final until = palette.timing.keyframes[index + 1].time;
+      final a = poses[index].start;
+      final z = poses[index].end.isEmpty ? poses[index + 1].start : poses[index].end;
+      b.writeln('    if (frame < $until) {');
+      if (timing.hold || a.indexed.every((e) => e.$2 == z[e.$1])) {
+        b.writeln('      return ${sample(a)};');
+      } else {
+        final offset = timing.time == 0 ? 'frame' : '(frame - ${timing.time})';
+        final t = '$offset / ${until - timing.time}';
+        final curved =
+            timing.outX != null &&
+            timing.inX != null &&
+            timing.outY != null &&
+            timing.inY != null &&
+            !_isIdentityEasing(timing);
+        final progress = curved
+            ? '_transformCurve${_curveIndexFor(_curves, outX: timing.outX!, outY: timing.outY!, inX: timing.inX!, inY: timing.inY!)}($t)'
+            : t;
+        b.writeln('      final t = $progress;');
+        final colors = [
+          for (var j = 0; j < a.length; j++)
+            if (a[j] == z[j]) color(a[j]) else 'Color.lerp(${color(a[j])}, ${color(z[j])}, t)!',
+        ];
+        if (geometry != null) {
+          needsColorBuffer = true;
+          for (var j = 0; j < colors.length; j++) {
+            if (poses.length == 2 && a[j] == z[j]) continue;
+            b.writeln('      ${name}Colors[$j] = ${colors[j]};');
+          }
+        }
+        b.writeln('      return ${paint(colors, constant: false)};');
+      }
+      b.writeln('    }');
+    }
+    b.writeln('    return ${sample(poses.last.start)};');
+    b.writeln('  }');
+    if (needsColorBuffer) {
+      b.writeln('  final ${name}Colors = <Color>[${poses.first.start.map(color).join(', ')}];');
+    }
+    for (final entry in samples.entries) {
+      b.writeln('  static final ${entry.value} = ${entry.key};');
+    }
+  }
+
   String _colorReference(
     LottieShape shape,
     _CustomizationPlan customizations,
@@ -3172,8 +3282,10 @@ class LottieGenerator {
       LottieStroke() => (shape.colorR, shape.colorG, shape.colorB, shape.colorA),
       _ => throw StateError('Only Lottie fills and strokes have customizable colors.'),
     };
-    final defaultColor = _colorToHex(r, g, b, a);
-    return '_dotdartApplyOpacity(overrides.${color.name} ?? const Color($defaultColor), $opacity)';
+    final defaultColor = shape is LottieFill && shape.palette != null
+        ? _paletteReference(shape)
+        : 'const Color(${_colorToHex(r, g, b, a)})';
+    return '_dotdartApplyOpacity(overrides.${color.name} ?? $defaultColor, $opacity)';
   }
 
   String _textAlign(int justification) {

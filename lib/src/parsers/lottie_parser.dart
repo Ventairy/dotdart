@@ -2,12 +2,15 @@ import 'dart:convert';
 
 import '../models/lottie_animation.dart';
 import '../models/lottie_composition.dart';
+import '../models/lottie_fill_palette.dart';
 import '../models/lottie_keyframe.dart';
 import '../models/lottie_layer.dart';
 import '../models/lottie_path_keyframe.dart';
 import '../models/lottie_shape.dart';
 import '../models/lottie_shape_enums.dart';
 import '../models/lottie_text.dart';
+
+part 'lottie_fill_parser.dart';
 
 /// Exception thrown when the parser encounters an unsupported Lottie feature.
 class DotdartUnsupportedFeatureException implements Exception {
@@ -452,11 +455,11 @@ class LottieParser {
       if ((property['a'] as num?)?.toInt() == 1) {
         throw DotdartUnsupportedFeatureException('$maskPath uses an animated mask path.');
       }
-      final opacity = _staticMaskValue(mask['o'], path: '$maskPath.o', fallback: 100);
+      final opacity = _staticPropertyValue(mask['o'], path: '$maskPath.o', fallback: 100);
       if (opacity != 100) {
         throw DotdartUnsupportedFeatureException('$maskPath uses mask opacity other than 100%.');
       }
-      final expansion = _staticMaskValue(mask['x'], path: '$maskPath.x', fallback: 0);
+      final expansion = _staticPropertyValue(mask['x'], path: '$maskPath.x', fallback: 0);
       if (expansion != 0) {
         throw DotdartUnsupportedFeatureException('$maskPath uses non-zero mask expansion.');
       }
@@ -465,7 +468,7 @@ class LottieParser {
     return result;
   }
 
-  static double _staticMaskValue(Object? raw, {required String path, required double fallback}) {
+  static double _staticPropertyValue(Object? raw, {required String path, required double fallback}) {
     if (raw == null) return fallback;
     final property = _requiredMap(raw, path: path);
     if ((property['a'] as num?)?.toInt() == 1) {
@@ -476,7 +479,7 @@ class LottieParser {
     if (value is List<dynamic> && value.isNotEmpty && value.first is num) {
       return (value.first as num).toDouble();
     }
-    throw DotdartInvalidLottieException('Expected a static mask value at $path.k.');
+    throw DotdartInvalidLottieException('Expected a static value at $path.k.');
   }
 
   static List<double> _numberList(Object? raw, {required String path}) {
@@ -515,6 +518,14 @@ class LottieParser {
         if (item is LottieTrimPath) hasTrimPath = true;
         items.add(item);
       }
+    }
+    // An inherited gradient belongs to the parent coordinate system. Flattening
+    // would incorrectly move its endpoints along with the nested geometry.
+    if (items.any((item) => item is LottieGroup) &&
+        items.whereType<LottieFill>().any((fill) => fill.palette?.geometry != null)) {
+      throw DotdartUnsupportedFeatureException(
+        '$path mixes a gradient fill with nested groups. Move the fill into the group containing its geometry.',
+      );
     }
     if (hasTrimPath) {
       for (final item in items) {
@@ -802,7 +813,10 @@ class LottieParser {
       case 'el':
         return _parseEllipse(raw);
       case 'fl':
+        if ((raw['c'] as Map<String, dynamic>?)?['a'] == 1) return _LottieFillParser.parse(raw, path: path);
         return _parseFill(raw);
+      case 'gf':
+        return _LottieFillParser.parse(raw, path: path);
       case 'st':
         return _parseStroke(raw);
       case 'tm':

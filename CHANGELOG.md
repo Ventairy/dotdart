@@ -1,3 +1,11 @@
+## 0.13.0
+
+- Support animated Lottie solid fills and fixed-position linear and centered
+  radial gradient fills, including separately positioned opacity stops.
+- Migration: gradient fills outside this subset now produce a build error.
+  For artwork that previously built with a skipped gradient, use fixed stops
+  and endpoints and place the fill in the same group as its shapes.
+
 ## 0.12.2
 
 - Support animated Lottie path geometry with matching vertex counts and open
