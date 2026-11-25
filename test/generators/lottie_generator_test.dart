@@ -12,6 +12,20 @@ import 'package:dotdart/src/parsers/lottie_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('when compiling color fills, it should cache the static shader and emit native animated colors', () {
+    final animation = LottieParser.parse(File('example/assets/lotties/color_fills.json').readAsStringSync()).animation;
+    final source = LottieGenerator(animation, 'color_fills.json').generateWidgetClass();
+    expect(
+      source,
+      allOf(
+        contains('static final _palette2 = ui.Gradient.radial'),
+        contains('ui.Gradient.linear'),
+        contains('Color.lerp'),
+        isNot(contains('saveLayer(')),
+      ),
+    );
+  });
+
   for (final (asset, expectations) in [
     (
       'path_morph',

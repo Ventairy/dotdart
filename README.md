@@ -196,6 +196,9 @@ Automatic playback pauses when either the platform's Reduce Motion preference
 or disabled-animation setting is active. `respectDisableAnimations: false`
 opts out of both preferences.
 
+Lottie animations can use animated solid colors and linear or centered radial
+gradient fills with fixed endpoints and stop positions.
+
 Supported Lottie paths can animate their vertices and Bézier handles when
 all keyframes have the same vertex count and open or closed status. Generated
 painters reuse path storage and interpolate directly, without parsing JSON or

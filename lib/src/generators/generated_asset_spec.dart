@@ -16,7 +16,7 @@ class GeneratedAssetSpec {
     this.requiresPathMetrics = false,
     this.requiresTypedData = false,
     this.requiresImageFilter = false,
-    this.requiresRadialGradient = false,
+    this.requiresGradient = false,
     this.requiresEmbeddedImages = false,
   });
 
@@ -53,8 +53,8 @@ class GeneratedAssetSpec {
   /// Whether generated shadows need the Flutter image-filter type.
   final bool requiresImageFilter;
 
-  /// Whether SVG fills need Flutter's native radial shader constructor.
-  final bool requiresRadialGradient;
+  /// Whether fills need a native gradient shader.
+  final bool requiresGradient;
 
   /// Whether SVG patterns need the shared embedded PNG loader.
   final bool requiresEmbeddedImages;

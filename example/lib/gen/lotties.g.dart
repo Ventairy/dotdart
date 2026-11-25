@@ -9,6 +9,7 @@
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui show Gradient;
 import 'dart:ui' show PathMetric;
 import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/widgets.dart';
@@ -221,6 +222,9 @@ mixin _DotdartLottieAnimationState<T extends StatefulWidget>
 /// $Lotties.cataquiJobCardsCarousel(<params>);
 /// ```
 /// ```dart
+/// $Lotties.colorFills(<params>);
+/// ```
+/// ```dart
 /// $Lotties.pathMorph(<params>);
 /// ```
 /// ```dart
@@ -274,6 +278,33 @@ abstract final class $Lotties {
     CataquiJobCardsCarouselOverrides overrides =
         const CataquiJobCardsCarouselOverrides(),
   }) => _CataquiJobCardsCarousel(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    clip: clip,
+    progress: progress,
+    delay: delay,
+    duration: duration,
+    playback: playback,
+    respectDisableAnimations: respectDisableAnimations,
+    overrides: overrides,
+  );
+
+  /// Builds the `ColorFills` widget from `colorFills.json`.
+  static Widget colorFills({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    bool clip = true,
+    double? progress,
+    Duration delay = Duration.zero,
+    Duration? duration,
+    LottiePlayback playback = LottiePlayback.once,
+    bool respectDisableAnimations = true,
+    ColorFillsOverrides overrides = const ColorFillsOverrides(),
+  }) => _ColorFills(
     key: key,
     width: width,
     height: height,
@@ -387,6 +418,7 @@ abstract final class $Lotties {
       width: width,
       height: height,
     ),
+    'color_fills.json' => colorFills(key: key, width: width, height: height),
     'path_morph.json' => pathMorph(key: key, width: width, height: height),
     'pulse.json' => pulse(key: key, width: width, height: height),
     'trim_path.json' => trimPath(key: key, width: width, height: height),
@@ -12528,6 +12560,276 @@ class _CataquiJobCardsCarouselPainter extends CustomPainter {
     _textPainter44?.dispose();
     _textPainter45?.dispose();
     _textPainter46?.dispose();
+  }
+}
+
+/// Text and color values that replace defaults in `color_fills.json`.
+final class ColorFillsOverrides {
+  /// Creates Lottie value overrides.
+  const ColorFillsOverrides({this.swatchesColor});
+
+  /// Replacement color for the `Swatches` Lottie layer.
+  final Color? swatchesColor;
+}
+
+/// A dotdart-generated animated widget from `assets/lotties/color_fills.json`.
+///
+/// Renders a 1050ms animation
+/// (21 frames at 20.0Hz)
+/// on a 60×20 canvas.
+/// No Lottie runtime dependency — the animation is drawn
+/// entirely via [CustomPainter].
+class _ColorFills extends StatefulWidget {
+  const _ColorFills({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.clip = true,
+    this.progress,
+    this.delay = Duration.zero,
+    this.duration,
+    this.playback = LottiePlayback.once,
+    this.respectDisableAnimations = true,
+    this.overrides = const ColorFillsOverrides(),
+  });
+
+  static const double _lottieWidth = 60;
+  static const double _lottieHeight = 20;
+  static const int _totalFrames = 21;
+  static const Duration _nativeDuration = Duration(milliseconds: 1050);
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Whether painting is clipped to the Lottie canvas bounds.
+  final bool clip;
+
+  /// Fixed animation progress from 0 to 1.
+  final double? progress;
+
+  /// Non-negative time to wait once before automatic playback starts.
+  final Duration delay;
+
+  /// Positive total playback time. When null, uses the duration from the Lottie file.
+  final Duration? duration;
+
+  /// Whether automatic playback runs once or loops continuously.
+  final LottiePlayback playback;
+
+  /// Whether reduced-motion settings pause playback.
+  final bool respectDisableAnimations;
+
+  /// Text and color values that replace defaults from the Lottie file.
+  final ColorFillsOverrides overrides;
+
+  @override
+  State<_ColorFills> createState() => _ColorFillsState();
+}
+
+class _ColorFillsState extends State<_ColorFills>
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _DotdartLottieAnimationState<_ColorFills> {
+  @override
+  double? get lottieWidgetWidth => widget.width;
+
+  @override
+  double? get lottieWidgetHeight => widget.height;
+
+  @override
+  bool get lottieMaintainAspectRatio => widget.maintainAspectRatio;
+
+  @override
+  double? get lottieProgress => widget.progress;
+
+  @override
+  Duration get lottieDelay => widget.delay;
+
+  @override
+  Duration? get lottieDuration => widget.duration;
+
+  @override
+  LottiePlayback get lottiePlayback => widget.playback;
+
+  @override
+  bool get lottieRespectDisableAnimations => widget.respectDisableAnimations;
+
+  @override
+  Duration get lottieNativeDuration => _ColorFills._nativeDuration;
+
+  @override
+  double get lottieCanvasWidth => _ColorFills._lottieWidth;
+
+  @override
+  double get lottieCanvasHeight => _ColorFills._lottieHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _ColorFillsPainter(
+            animationProgress: widget.progress == null ? _controller : null,
+            fixedProgress: (widget.progress ?? 0).clamp(0, 1).toDouble(),
+            canvasScaleX: width / _ColorFills._lottieWidth,
+            canvasScaleY: height / _ColorFills._lottieHeight,
+            canvasRect: Rect.fromLTWH(0, 0, width, height),
+            clip: widget.clip,
+            overrides: widget.overrides,
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorFillsPainter extends CustomPainter {
+  _ColorFillsPainter({
+    required this._fixedProgress,
+    required this._canvasScaleX,
+    required this._canvasScaleY,
+    required this._canvasRect,
+    required this.clip,
+    required this.overrides,
+    this._animationProgress,
+  }) : super(repaint: _animationProgress);
+
+  final double _fixedProgress;
+  final double _canvasScaleX;
+  final double _canvasScaleY;
+  final Rect _canvasRect;
+  final Animation<double>? _animationProgress;
+
+  final bool clip;
+
+  final ColorFillsOverrides overrides;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+
+  Color _palette0(double frame) {
+    if (frame <= 0.0) return const Color(0xffff0000);
+    if (frame < 20.0) {
+      final t = frame / 20.0;
+      return Color.lerp(const Color(0xffff0000), const Color(0xff0000ff), t)!;
+    }
+    return const Color(0xff0000ff);
+  }
+
+  ui.Gradient _palette1(double frame) {
+    if (frame <= 0.0) return _palette1Stop0;
+    if (frame < 20.0) {
+      final t = frame / 20.0;
+      _palette1Colors[0] = Color.lerp(
+        const Color(0xff00ff00),
+        const Color(0xffff0000),
+        t,
+      )!;
+      _palette1Colors[1] = Color.lerp(
+        const Color(0xff00ff00),
+        const Color(0xffffff00),
+        t,
+      )!;
+      return ui.Gradient.linear(
+        const Offset(20, 10),
+        const Offset(30, 10),
+        _palette1Colors,
+        const [0.0, 1.0],
+      );
+    }
+    return _palette1Stop1;
+  }
+
+  final _palette1Colors = <Color>[
+    const Color(0xff00ff00),
+    const Color(0xff00ff00),
+  ];
+  static final _palette1Stop0 = ui.Gradient.linear(
+    const Offset(20, 10),
+    const Offset(30, 10),
+    const [Color(0xff00ff00), Color(0xff00ff00)],
+    const [0.0, 1.0],
+  );
+  static final _palette1Stop1 = ui.Gradient.linear(
+    const Offset(20, 10),
+    const Offset(30, 10),
+    const [Color(0xffff0000), Color(0xffffff00)],
+    const [0.0, 1.0],
+  );
+  static final _palette2 = ui.Gradient.radial(
+    const Offset(50, 10),
+    10,
+    const [Color(0xff000000), Color(0x80000000), Color(0x00000000)],
+    const [0.0, 0.5, 1.0],
+  );
+  static final RRect _rrect0_0_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(10, 10), width: 20, height: 20),
+    Radius.zero,
+  );
+  static final RRect _rrect0_1_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(30, 10), width: 20, height: 20),
+    Radius.zero,
+  );
+  static final RRect _rrect0_2_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(50, 10), width: 20, height: 20),
+    Radius.zero,
+  );
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final progress = _animationProgress?.value ?? _fixedProgress;
+    final frame = math.min(20.999999, progress * _ColorFills._totalFrames);
+
+    canvas.save();
+    if (clip) canvas.clipRect(_canvasRect);
+    canvas.scale(_canvasScaleX, _canvasScaleY);
+
+    _drawSwatches0(canvas, frame, 1);
+
+    canvas.restore();
+  }
+
+  void _drawSwatches0(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group:
+    final fillPaint2_0 = _fillPaint
+      ..shader = _palette2
+      ..color = _dotdartApplyOpacity(const Color(0xffffffff), layerOpacity * 1);
+    canvas.drawRRect(_rrect0_2_0, fillPaint2_0);
+    // Group:
+    final fillPaint1_0 = _fillPaint
+      ..shader = _palette1(frame)
+      ..color = _dotdartApplyOpacity(const Color(0xffffffff), layerOpacity * 1);
+    canvas.drawRRect(_rrect0_1_0, fillPaint1_0);
+    // Group:
+    final fillPaint0_0 = _fillPaint
+      ..shader = null
+      ..color = _dotdartApplyOpacity(
+        overrides.swatchesColor ?? _palette0(frame),
+        layerOpacity * 1,
+      );
+    canvas.drawRRect(_rrect0_0_0, fillPaint0_0);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ColorFillsPainter oldDelegate) {
+    return oldDelegate._fixedProgress != _fixedProgress ||
+        oldDelegate._canvasScaleX != _canvasScaleX ||
+        oldDelegate._canvasScaleY != _canvasScaleY ||
+        oldDelegate._canvasRect != _canvasRect ||
+        oldDelegate._animationProgress != _animationProgress ||
+        oldDelegate.clip != clip ||
+        oldDelegate.overrides != overrides;
   }
 }
 

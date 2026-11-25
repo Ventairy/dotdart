@@ -76,6 +76,34 @@ const _minimalLottie = '''
 
 void main() {
   group('LottieParser', () {
+    test('when a gradient has independent opacity stops, it should merge them into its color stops', () {
+      final animation = LottieParser.parse(File('example/assets/lotties/color_fills.json').readAsStringSync())
+          .animation;
+      final palette = animation.layers.single.shapeGroups.last.items.whereType<LottieFill>().single.palette!;
+      expect(
+        [palette.stops, palette.poses.single.start],
+        [
+          [0, 0.5, 1],
+          [0xff000000, 0x80000000, 0],
+        ],
+      );
+    });
+
+    test('when a gradient endpoint is animated, it should identify the unsupported property', () {
+      final raw = _minimalLottie.replaceFirst('"ty": "fl",', '''
+        "ty": "gf", "t":1, "g":{"p":2,"k":{"k":[0,0,0,0,1,1,1,1]}},
+        "s":{"a":1,"k":[]}, "e":{"k":[10,0]},''');
+      expect(
+        () => LottieParser.parse(raw),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (e) => e.message,
+            'message',
+            contains(r'$.layers[0].shapes.it[0].it[1].s'),
+          ),
+        ),
+      );
+    });
     test('when a path has animated geometry, it should preserve its poses without warnings', () {
       final result = LottieParser.parse(
         File('test/fixtures/generated_consumer/assets/lotties/path_morph.json').readAsStringSync(),

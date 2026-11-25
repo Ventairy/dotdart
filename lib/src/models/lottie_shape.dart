@@ -1,4 +1,5 @@
 import 'lottie_animated_scalar.dart';
+import 'lottie_fill_palette.dart';
 import 'lottie_path_keyframe.dart';
 import 'lottie_shape_enums.dart';
 
@@ -134,6 +135,7 @@ class LottieFill extends LottieShape {
     required this.colorA,
     required this.opacity,
     this.fillRule = 1,
+    this.palette,
   });
 
   /// Red component (0.0–1.0).
@@ -153,6 +155,8 @@ class LottieFill extends LottieShape {
 
   /// Fill rule: 1 = non-zero, 2 = even-odd.
   final int fillRule;
+
+  final LottieFillPalette? palette;
 }
 
 /// A solid stroke (`ty: "st"`).
