@@ -262,6 +262,15 @@ class LottieParser {
           flattenedGroups,
           path: '$path.shapes',
         );
+        if (flattenedGroups.any((group) => group.repeater != null) &&
+            (flattenedGroups.any(
+                  (group) => group.repeater != null && group.items.whereType<LottieStroke>().isNotEmpty,
+                ) ||
+                !_hasExactFlattenedPaintOwnership(parsedTree, flattenedGroups) ||
+                _requiresHierarchyForNestedStrokeScale(parsedTree))) {
+          throw DotdartUnsupportedFeatureException('$path requires each repeated rectangle to own its fill.');
+        }
+        _validateAnimatedRectangles(parsedTree, flattenedGroups, path: '$path.shapes');
         shapeTree = parsedTree;
         shapeGroups.addAll(flattenedGroups);
       }
@@ -507,10 +516,20 @@ class LottieParser {
     final it = _optionalList(raw['it'], path: '$path.it');
 
     final items = <LottieShape>[];
+    LottieRepeater? repeater;
     var hasTrimPath = false;
     for (var index = 0; index < it.length; index++) {
       final itemPath = '$path.it[$index]';
-      final item = _parseShapeItem(_requiredMap(it[index], path: itemPath), warnings, path: itemPath);
+      final data = _requiredMap(it[index], path: itemPath);
+      if (data['ty'] == 'rp') {
+        final types = it.map((value) => _requiredMap(value, path: path)['ty']).toList();
+        if (types case ['rc', 'gf' || 'fl', 'rp'] || ['rc', 'gf' || 'fl', 'rp', 'tr']) {
+          repeater = _parseRepeater(data, path: itemPath);
+          continue;
+        }
+        throw DotdartUnsupportedFeatureException('$itemPath needs a repeater after one rectangle and its fill.');
+      }
+      final item = _parseShapeItem(data, warnings, path: itemPath);
       if (item != null) {
         if (item is LottieTrimPath && hasTrimPath) {
           throw DotdartUnsupportedFeatureException('$path contains more than one trim-path modifier.');
@@ -544,7 +563,41 @@ class LottieParser {
       }
     }
 
-    return LottieGroup(name: nm, items: items);
+    return LottieGroup(name: nm, items: items, repeater: repeater);
+  }
+
+  static LottieRepeater _parseRepeater(Map<String, dynamic> raw, {required String path}) {
+    final transform = _requiredMap(raw['tr'], path: '$path.tr');
+    double value(Map<String, dynamic> owner, String key, double fallback, {int axis = 0}) {
+      if (owner[key] == null) return fallback;
+      final property = _requiredMap(owner[key], path: '$path.$key');
+      if (property['a'] == 1 || property['s'] == true || property['x'] is String) {
+        throw DotdartUnsupportedFeatureException('$path requires static repeater properties.');
+      }
+      return _staticValue(property, axis);
+    }
+
+    final copies = value(raw, 'c', 1);
+    if (copies != copies.truncateToDouble() ||
+        copies < 1 ||
+        copies > 64 ||
+        (raw['m'] ?? 1) != 1 ||
+        value(raw, 'o', 0) != 0 ||
+        value(transform, 'r', 0) != 0 ||
+        value(transform, 's', 100) != 100 ||
+        value(transform, 's', 100, axis: 1) != 100 ||
+        value(transform, 'sk', 0) != 0) {
+      throw DotdartUnsupportedFeatureException(
+        '$path supports 1–64 translated copies, zero offset, and composite mode 1.',
+      );
+    }
+    return (
+      copies: copies.toInt(),
+      dx: value(transform, 'p', 0),
+      dy: value(transform, 'p', 0, axis: 1),
+      startOpacity: value(transform, 'so', 100) / 100,
+      endOpacity: value(transform, 'eo', 100) / 100,
+    );
   }
 
   static List<LottieGroup> _flattenGroups(
@@ -561,6 +614,7 @@ class LottieParser {
         LottieGroup(
           name: group.name,
           ancestorTransforms: ancestors,
+          repeater: group.repeater,
           items: [
             ...group.items,
             if (!group.items.any((item) => item is LottieFill) && fill != null) fill,
@@ -602,12 +656,29 @@ class LottieParser {
       final occurrences = flattenedGroups.expand((group) => group.items).where((item) => identical(item, paint)).length;
       if (occurrences == 1) continue;
       throw DotdartUnsupportedFeatureException(
-        '$path combines animated nested-group positions with a paint stack that cannot be preserved exactly. '
+        '$path combines animated nested-group transforms with a paint stack that cannot be preserved exactly. '
         'Move the animation to a layer transform or flatten the affected groups before exporting.',
       );
     }
 
     _validateAnimatedNestedStrokeScale(root, path: path);
+  }
+
+  static void _validateAnimatedRectangles(LottieGroup root, List<LottieGroup> groups, {required String path}) {
+    late final needsHierarchy =
+        !_hasExactFlattenedPaintOwnership(root, groups) || _requiresHierarchyForNestedStrokeScale(root);
+    for (final group in groups) {
+      if (!group.items.whereType<LottieRect>().any((rect) => rect.hasAnimatedSize)) continue;
+      final geometry = group.items.where((item) => item is LottiePath || item is LottieEllipse || item is LottieRect);
+      final rectangular = geometry.every((item) => item is LottieRect && item.direction == 1);
+      if ((geometry.length == 1 || rectangular) && group.items.whereType<LottieTrimPath>().isEmpty && !needsHierarchy) {
+        continue;
+      }
+      throw DotdartUnsupportedFeatureException(
+        '$path uses animated rectangle size with unsupported compound geometry, nested paints, or a trim path. '
+        'Place the rectangle and its paint in a separate shape layer.',
+      );
+    }
   }
 
   static void _validateTrimmedNestedPaints(
@@ -716,7 +787,7 @@ class LottieParser {
       if (!_isVisiblePaint(item)) continue;
       for (var precedingIndex = 0; precedingIndex < itemIndex; precedingIndex++) {
         final preceding = group.items[precedingIndex];
-        if (preceding is LottieGroup && _containsAnimatedGroupPosition(preceding)) return true;
+        if (preceding is LottieGroup && _containsAnimatedGroupTransform(preceding)) return true;
       }
     }
     return false;
@@ -736,13 +807,17 @@ class LottieParser {
     };
   }
 
-  static bool _containsAnimatedGroupPosition(LottieGroup group) {
+  static bool _containsAnimatedGroupTransform(LottieGroup group) {
     for (final item in group.items) {
       if (item is LottieGroupTransform &&
-          (_hasChangingScalar(item.animatedPositionX) || _hasChangingScalar(item.animatedPositionY))) {
+          (_hasChangingScalar(item.animatedPositionX) ||
+              _hasChangingScalar(item.animatedPositionY) ||
+              item.animatedRotation != null ||
+              item.animatedScaleX != null ||
+              item.animatedScaleY != null)) {
         return true;
       }
-      if (item is LottieGroup && _containsAnimatedGroupPosition(item)) return true;
+      if (item is LottieGroup && _containsAnimatedGroupTransform(item)) return true;
     }
     return false;
   }
@@ -764,7 +839,7 @@ class LottieParser {
       if (item is! LottieStroke || item.opacity <= 0) continue;
       for (var precedingIndex = 0; precedingIndex < itemIndex; precedingIndex++) {
         final preceding = group.items[precedingIndex];
-        if (preceding is! LottieGroup || !_containsAnimatedGroupPosition(preceding)) continue;
+        if (preceding is! LottieGroup || !_containsAnimatedGroupTransform(preceding)) continue;
         if (!_containsNonIdentityGroupScale(preceding)) continue;
         throw DotdartUnsupportedFeatureException(
           '$path applies a parent stroke across animated, scaled nested geometry. '
@@ -789,7 +864,7 @@ class LottieParser {
 
   static bool _containsNonIdentityGroupScale(LottieGroup group) {
     for (final item in group.items) {
-      if (item is LottieGroupTransform && (item.scaleX != 100 || item.scaleY != 100)) return true;
+      if (item is LottieGroupTransform && item.hasScale) return true;
       if (item is LottieGroup && _containsNonIdentityGroupScale(item)) return true;
     }
     return false;
@@ -975,11 +1050,15 @@ class LottieParser {
     final r = raw['r'] as Map<String, dynamic>? ?? {};
     final d = (raw['d'] as num?)?.toInt() ?? 1;
 
+    final width = s['a'] == 1 ? _parseAnimatedScalarFromArray(s, 0) : null;
+    final height = s['a'] == 1 ? _parseAnimatedScalarFromArray(s, 1) : null;
     return LottieRect(
       positionX: _staticValue(p, 0),
       positionY: _staticValue(p, 1),
-      width: _staticValue(s, 0),
-      height: _staticValue(s, 1),
+      width: width?.keyframes.first.start ?? _staticValue(s, 0),
+      height: height?.keyframes.first.start ?? _staticValue(s, 1),
+      animatedWidth: _hasChangingScalar(width) ? width : null,
+      animatedHeight: _hasChangingScalar(height) ? height : null,
       cornerRadius: _staticValue(r, 0),
       direction: d,
     );
@@ -1054,11 +1133,16 @@ class LottieParser {
     final position = raw['p'] as Map<String, dynamic>?;
     final positionX = _parsePositionAxis(position, 0, path: '$path.p');
     final positionY = _parsePositionAxis(position, 1, path: '$path.p');
-    for (final key in ['a', 's', 'r', 'o']) {
+    for (final key in ['a', 'o']) {
       if ((raw[key] as Map<String, dynamic>?)?['a'] == 1) {
         throw DotdartUnsupportedFeatureException('Animated group "$key" is not supported; use a layer transform.');
       }
     }
+    final scale = raw['s'] as Map<String, dynamic>?;
+    final rotationProperty = raw['r'] as Map<String, dynamic>?;
+    final scaleX = scale?['a'] == 1 ? _parseAnimatedScalarFromArray(scale, 0) : null;
+    final scaleY = scale?['a'] == 1 ? _parseAnimatedScalarFromArray(scale, 1) : null;
+    final rotation = rotationProperty?['a'] == 1 ? _parseAnimatedScalar(rotationProperty) : null;
     return LottieGroupTransform(
       positionX: positionX.animated ? 0 : positionX.staticValue,
       animatedPositionX: positionX.animated ? positionX : null,
@@ -1066,9 +1150,12 @@ class LottieParser {
       positionY: positionY.animated ? 0 : positionY.staticValue,
       anchorX: _staticValue(raw['a'] as Map<String, dynamic>?, 0),
       anchorY: _staticValue(raw['a'] as Map<String, dynamic>?, 1),
-      scaleX: raw['s'] == null ? 100 : _staticValue(raw['s'] as Map<String, dynamic>?, 0),
-      scaleY: raw['s'] == null ? 100 : _staticValue(raw['s'] as Map<String, dynamic>?, 1),
-      rotation: _staticValue(raw['r'] as Map<String, dynamic>?, 0),
+      scaleX: scaleX?.keyframes.first.start ?? (scale == null ? 100 : _staticValue(scale, 0)),
+      scaleY: scaleY?.keyframes.first.start ?? (scale == null ? 100 : _staticValue(scale, 1)),
+      rotation: rotation?.keyframes.first.start ?? _staticValue(rotationProperty, 0),
+      animatedScaleX: _hasChangingScalar(scaleX) ? scaleX : null,
+      animatedScaleY: _hasChangingScalar(scaleY) ? scaleY : null,
+      animatedRotation: _hasChangingScalar(rotation) ? rotation : null,
       opacity: raw['o'] == null ? 100 : _staticValue(raw['o'] as Map<String, dynamic>?, 0),
     );
   }
@@ -1213,6 +1300,7 @@ class LottieParser {
     if (raw == null) return null;
     final val = raw[key] as dynamic;
     if (val is List) {
+      if (val.length == 1) return (val.single as num).toDouble();
       if (index < val.length) return (val[index] as num).toDouble();
       return null;
     }

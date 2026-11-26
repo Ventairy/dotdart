@@ -225,6 +225,9 @@ mixin _DotdartLottieAnimationState<T extends StatefulWidget>
 /// $Lotties.colorFills(<params>);
 /// ```
 /// ```dart
+/// $Lotties.groupMotion(<params>);
+/// ```
+/// ```dart
 /// $Lotties.pathMorph(<params>);
 /// ```
 /// ```dart
@@ -305,6 +308,33 @@ abstract final class $Lotties {
     bool respectDisableAnimations = true,
     ColorFillsOverrides overrides = const ColorFillsOverrides(),
   }) => _ColorFills(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    clip: clip,
+    progress: progress,
+    delay: delay,
+    duration: duration,
+    playback: playback,
+    respectDisableAnimations: respectDisableAnimations,
+    overrides: overrides,
+  );
+
+  /// Builds the `GroupMotion` widget from `groupMotion.json`.
+  static Widget groupMotion({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    bool clip = true,
+    double? progress,
+    Duration delay = Duration.zero,
+    Duration? duration,
+    LottiePlayback playback = LottiePlayback.once,
+    bool respectDisableAnimations = true,
+    GroupMotionOverrides overrides = const GroupMotionOverrides(),
+  }) => _GroupMotion(
     key: key,
     width: width,
     height: height,
@@ -419,6 +449,7 @@ abstract final class $Lotties {
       height: height,
     ),
     'color_fills.json' => colorFills(key: key, width: width, height: height),
+    'group_motion.json' => groupMotion(key: key, width: width, height: height),
     'path_morph.json' => pathMorph(key: key, width: width, height: height),
     'pulse.json' => pulse(key: key, width: width, height: height),
     'trim_path.json' => trimPath(key: key, width: width, height: height),
@@ -12823,6 +12854,343 @@ class _ColorFillsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ColorFillsPainter oldDelegate) {
+    return oldDelegate._fixedProgress != _fixedProgress ||
+        oldDelegate._canvasScaleX != _canvasScaleX ||
+        oldDelegate._canvasScaleY != _canvasScaleY ||
+        oldDelegate._canvasRect != _canvasRect ||
+        oldDelegate._animationProgress != _animationProgress ||
+        oldDelegate.clip != clip ||
+        oldDelegate.overrides != overrides;
+  }
+}
+
+/// Text and color values that replace defaults in `group_motion.json`.
+final class GroupMotionOverrides {
+  /// Creates Lottie value overrides.
+  const GroupMotionOverrides({this.color1});
+
+  /// Replacement color for the `unnamed shape` Lottie layer.
+  final Color? color1;
+}
+
+/// A dotdart-generated animated widget from `assets/lotties/group_motion.json`.
+///
+/// Renders a 1033ms animation
+/// (31 frames at 30.0Hz)
+/// on a 64×64 canvas.
+/// No Lottie runtime dependency — the animation is drawn
+/// entirely via [CustomPainter].
+class _GroupMotion extends StatefulWidget {
+  const _GroupMotion({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.clip = true,
+    this.progress,
+    this.delay = Duration.zero,
+    this.duration,
+    this.playback = LottiePlayback.once,
+    this.respectDisableAnimations = true,
+    this.overrides = const GroupMotionOverrides(),
+  });
+
+  static const double _lottieWidth = 64;
+  static const double _lottieHeight = 64;
+  static const int _totalFrames = 31;
+  static const Duration _nativeDuration = Duration(milliseconds: 1033);
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Whether painting is clipped to the Lottie canvas bounds.
+  final bool clip;
+
+  /// Fixed animation progress from 0 to 1.
+  final double? progress;
+
+  /// Non-negative time to wait once before automatic playback starts.
+  final Duration delay;
+
+  /// Positive total playback time. When null, uses the duration from the Lottie file.
+  final Duration? duration;
+
+  /// Whether automatic playback runs once or loops continuously.
+  final LottiePlayback playback;
+
+  /// Whether reduced-motion settings pause playback.
+  final bool respectDisableAnimations;
+
+  /// Text and color values that replace defaults from the Lottie file.
+  final GroupMotionOverrides overrides;
+
+  @override
+  State<_GroupMotion> createState() => _GroupMotionState();
+}
+
+class _GroupMotionState extends State<_GroupMotion>
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _DotdartLottieAnimationState<_GroupMotion> {
+  @override
+  double? get lottieWidgetWidth => widget.width;
+
+  @override
+  double? get lottieWidgetHeight => widget.height;
+
+  @override
+  bool get lottieMaintainAspectRatio => widget.maintainAspectRatio;
+
+  @override
+  double? get lottieProgress => widget.progress;
+
+  @override
+  Duration get lottieDelay => widget.delay;
+
+  @override
+  Duration? get lottieDuration => widget.duration;
+
+  @override
+  LottiePlayback get lottiePlayback => widget.playback;
+
+  @override
+  bool get lottieRespectDisableAnimations => widget.respectDisableAnimations;
+
+  @override
+  Duration get lottieNativeDuration => _GroupMotion._nativeDuration;
+
+  @override
+  double get lottieCanvasWidth => _GroupMotion._lottieWidth;
+
+  @override
+  double get lottieCanvasHeight => _GroupMotion._lottieHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _GroupMotionPainter(
+            animationProgress: widget.progress == null ? _controller : null,
+            fixedProgress: (widget.progress ?? 0).clamp(0, 1).toDouble(),
+            canvasScaleX: width / _GroupMotion._lottieWidth,
+            canvasScaleY: height / _GroupMotion._lottieHeight,
+            canvasRect: Rect.fromLTWH(0, 0, width, height),
+            clip: widget.clip,
+            overrides: widget.overrides,
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupMotionPainter extends CustomPainter {
+  _GroupMotionPainter({
+    required this._fixedProgress,
+    required this._canvasScaleX,
+    required this._canvasScaleY,
+    required this._canvasRect,
+    required this.clip,
+    required this.overrides,
+    this._animationProgress,
+  }) : super(repaint: _animationProgress);
+
+  final double _fixedProgress;
+  final double _canvasScaleX;
+  final double _canvasScaleY;
+  final Rect _canvasRect;
+  final Animation<double>? _animationProgress;
+
+  final bool clip;
+
+  final GroupMotionOverrides overrides;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+
+  double _group0_0_0Rotation(double frame) {
+    if (frame <= 0) return 0;
+    if (frame >= 20) return 90;
+    if (frame < 20) {
+      final t = frame / 20;
+      final eased = _transformCurve0(t);
+      return 0 + 90 * eased;
+    }
+    return 90;
+  }
+
+  double _group0_0_0ScaleX(double frame) {
+    if (frame <= 0) return 100;
+    if (frame >= 20) return 50;
+    if (frame < 20) {
+      final t = frame / 20;
+      final eased = _transformCurve0(t);
+      return 100 + -50 * eased;
+    }
+    return 50;
+  }
+
+  double _rrect0_0_0Height(double frame) {
+    if (frame <= 0) return 16;
+    if (frame >= 20) return 4;
+    if (frame < 20) {
+      final t = frame / 20;
+      final eased = _transformCurve0(t);
+      return 16 + -12 * eased;
+    }
+    return 4;
+  }
+
+  int _rrect0_0_0Revision = 0;
+  late RRect _rrect0_0_0Value;
+  double _rrect0_0_0LastHeight = double.nan;
+  RRect _rrect0_0_0(double frame) {
+    const halfWidth = 12 / 2;
+    final halfHeight = _rrect0_0_0Height(frame) / 2;
+    if (_rrect0_0_0LastHeight == halfHeight) return _rrect0_0_0Value;
+    _rrect0_0_0LastHeight = halfHeight;
+    _rrect0_0_0Revision++;
+    return _rrect0_0_0Value = RRect.fromLTRBXY(
+      12 - halfWidth,
+      0 - halfHeight,
+      12 + halfWidth,
+      0 + halfHeight,
+      3,
+      3,
+    );
+  }
+
+  double _rrect0_0_1Height(double frame) {
+    if (frame <= 0) return 16;
+    if (frame >= 20) return 4;
+    if (frame < 20) {
+      final t = frame / 20;
+      final eased = _transformCurve0(t);
+      return 16 + -12 * eased;
+    }
+    return 4;
+  }
+
+  int _rrect0_0_1Revision = 0;
+  late RRect _rrect0_0_1Value;
+  double _rrect0_0_1LastHeight = double.nan;
+  RRect _rrect0_0_1(double frame) {
+    const halfWidth = 12 / 2;
+    final halfHeight = _rrect0_0_1Height(frame) / 2;
+    if (_rrect0_0_1LastHeight == halfHeight) return _rrect0_0_1Value;
+    _rrect0_0_1LastHeight = halfHeight;
+    _rrect0_0_1Revision++;
+    return _rrect0_0_1Value = RRect.fromLTRBXY(
+      21 - halfWidth,
+      0 - halfHeight,
+      21 + halfWidth,
+      0 + halfHeight,
+      3,
+      3,
+    );
+  }
+
+  static final RRect _rrect0_1_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(-12, 0), width: 8, height: 8),
+    const Radius.circular(3),
+  );
+  static final RRect _rrect0_2_0 = RRect.fromRectAndRadius(
+    Rect.fromCenter(center: const Offset(4, 4), width: 4, height: 4),
+    Radius.zero,
+  );
+
+  final Path _compoundFillPath0_0Value = Path();
+  int _compoundFillPath0_0Revision0 = -1;
+  int _compoundFillPath0_0Revision1 = -1;
+  Path _compoundFillPath0_0(double frame) {
+    _rrect0_0_0(frame);
+    _rrect0_0_1(frame);
+    if (_compoundFillPath0_0Revision0 == _rrect0_0_0Revision &&
+        _compoundFillPath0_0Revision1 == _rrect0_0_1Revision) {
+      return _compoundFillPath0_0Value;
+    }
+    _compoundFillPath0_0Revision0 = _rrect0_0_0Revision;
+    _compoundFillPath0_0Revision1 = _rrect0_0_1Revision;
+    _compoundFillPath0_0Value
+      ..reset()
+      ..addRRect(_rrect0_0_0Value)
+      ..addRRect(_rrect0_0_1Value);
+    return _compoundFillPath0_0Value;
+  }
+
+  double _curve0T = double.nan;
+  double _curve0Value = 0;
+
+  double _transformCurve0(double t) {
+    if (t == _curve0T) return _curve0Value;
+    _curve0T = t;
+    return _curve0Value = const Cubic(0.3, 0, 0.7, 1).transform(t);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final progress = _animationProgress?.value ?? _fixedProgress;
+    final frame = math.min(30.999999, progress * _GroupMotion._totalFrames);
+
+    canvas.save();
+    if (clip) canvas.clipRect(_canvasRect);
+    canvas.scale(_canvasScaleX, _canvasScaleY);
+
+    _draw0(canvas, frame, 1);
+
+    canvas.restore();
+  }
+
+  void _draw0(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group: Fading copies
+    canvas.save();
+    final repeatOpacity2 = layerOpacity;
+    canvas.translate(12, 0);
+    for (var copy = 2; copy >= 0; copy--) {
+      final layerOpacity = repeatOpacity2 * (1 + copy * -0.3333);
+      final fillPaint2_0 = _fillPaint
+        ..color = _dotdartApplyOpacity(
+          overrides.color1 ?? const Color(0xffffffff),
+          layerOpacity * 1,
+        );
+      canvas.drawRRect(_rrect0_2_0, fillPaint2_0);
+      canvas.translate(-6, 0);
+    }
+    canvas.restore();
+    canvas.save();
+    canvas.translate(32, 32);
+    canvas.rotate(_group0_0_0Rotation(frame) * math.pi / 180);
+    canvas.scale(_group0_0_0ScaleX(frame) / 100);
+    // Group:
+    final fillPaint1_0 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.color1 ?? const Color(0xffffffff),
+        layerOpacity * 1,
+      );
+    canvas.drawRRect(_rrect0_1_0, fillPaint1_0);
+    // Group:
+    final compoundFillPaint0 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.color1 ?? const Color(0xffffffff),
+        layerOpacity * 1,
+      );
+    canvas.drawPath(_compoundFillPath0_0(frame), compoundFillPaint0);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _GroupMotionPainter oldDelegate) {
     return oldDelegate._fixedProgress != _fixedProgress ||
         oldDelegate._canvasScaleX != _canvasScaleX ||
         oldDelegate._canvasScaleY != _canvasScaleY ||

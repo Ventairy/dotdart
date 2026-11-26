@@ -199,6 +199,9 @@ opts out of both preferences.
 Lottie animations can use animated solid colors and linear or centered radial
 gradient fills with fixed endpoints and stop positions.
 
+Shape groups can animate position, scale, and rotation. Rectangles can animate width and height while keeping their corners rounded,
+including multiple rectangles that share one fill. A rectangle repeater can
+space copies at a fixed interval and fade them from first to last.
 Supported Lottie paths can animate their vertices and Bézier handles when
 all keyframes have the same vertex count and open or closed status. Generated
 painters reuse path storage and interpolate directly, without parsing JSON or

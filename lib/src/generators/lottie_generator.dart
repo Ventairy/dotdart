@@ -370,6 +370,7 @@ class LottieGenerator {
       final layer = entry.layer;
       final properties = <LottieAnimatedScalar?>[
         for (final fill in _layerShapes(layer).whereType<LottieFill>()) fill.palette?.timing,
+        for (final rect in _layerShapes(layer).whereType<LottieRect>()) ...[rect.animatedWidth, rect.animatedHeight],
         layer.opacity,
         layer.rotation,
         layer.positionX,
@@ -381,6 +382,9 @@ class LottieGenerator {
             for (final transform in group.items.whereType<LottieGroupTransform>()) ...[
               transform.animatedPositionX,
               transform.animatedPositionY,
+              transform.animatedScaleX,
+              transform.animatedScaleY,
+              transform.animatedRotation,
             ]
         else
           for (final group in layer.shapeGroups)
@@ -388,6 +392,9 @@ class LottieGenerator {
               for (final transform in _groupTransforms(group)) ...[
                 transform.animatedPositionX,
                 transform.animatedPositionY,
+                transform.animatedScaleX,
+                transform.animatedScaleY,
+                transform.animatedRotation,
               ],
         for (final group in layer.shapeGroups)
           if (!_isDefinitelyEmptyGroup(group))
@@ -787,20 +794,20 @@ class LottieGenerator {
           final transforms = entry.key.items.whereType<LottieGroupTransform>().toList();
           for (var transformIndex = 0; transformIndex < transforms.length; transformIndex++) {
             final groupPrefix = '_treeGroup${i}_${entry.value}_$transformIndex';
-            _writeScalarKeyframes(b, '${groupPrefix}X', transforms[transformIndex].animatedPositionX, curves);
-            _writeScalarKeyframes(b, '${groupPrefix}Y', transforms[transformIndex].animatedPositionY, curves);
+            _writeGroupKeyframes(b, groupPrefix, transforms[transformIndex], curves);
           }
         }
         continue;
       }
+      final prefixes = _flatGroupTransformPrefixes(layer, i);
+      final emitted = <LottieGroupTransform>{};
       for (var groupIndex = 0; groupIndex < layer.shapeGroups.length; groupIndex++) {
         final group = layer.shapeGroups[groupIndex];
         if (_isDefinitelyEmptyGroup(group)) continue;
         final transforms = _groupTransforms(group);
         for (var transformIndex = 0; transformIndex < transforms.length; transformIndex++) {
-          final prefix = '_group${i}_${groupIndex}_$transformIndex';
-          _writeScalarKeyframes(b, '${prefix}X', transforms[transformIndex].animatedPositionX, curves);
-          _writeScalarKeyframes(b, '${prefix}Y', transforms[transformIndex].animatedPositionY, curves);
+          final transform = transforms[transformIndex];
+          if (emitted.add(transform)) _writeGroupKeyframes(b, prefixes[transform]!, transform, curves);
         }
         final trim = _groupParts(group).trim;
         if (trim == null) continue;
@@ -810,6 +817,37 @@ class LottieGenerator {
         _writeScalarKeyframes(b, '${trimPrefix}Offset', trim.offset, curves);
       }
     }
+  }
+
+  void _writeGroupKeyframes(StringBuffer b, String prefix, LottieGroupTransform transform, List<_CurveEntry> curves) {
+    _writeScalarKeyframes(b, '${prefix}X', transform.animatedPositionX, curves);
+    _writeScalarKeyframes(b, '${prefix}Y', transform.animatedPositionY, curves);
+    _writeScalarKeyframes(b, '${prefix}Rotation', transform.animatedRotation, curves);
+    _writeScalarKeyframes(b, '${prefix}ScaleX', transform.animatedScaleX, curves);
+    if (!_hasUniformAnimatedScale(transform)) {
+      _writeScalarKeyframes(b, '${prefix}ScaleY', transform.animatedScaleY, curves);
+    }
+  }
+
+  bool _hasUniformAnimatedScale(LottieGroupTransform transform) {
+    final x = transform.animatedScaleX?.keyframes;
+    final y = transform.animatedScaleY?.keyframes;
+    if (x == null || y == null || x.length != y.length) return false;
+    for (var i = 0; i < x.length; i++) {
+      final a = x[i];
+      final b = y[i];
+      if (a.start != b.start ||
+          a.end != b.end ||
+          a.time != b.time ||
+          a.hold != b.hold ||
+          a.inX != b.inX ||
+          a.inY != b.inY ||
+          a.outX != b.outX ||
+          a.outY != b.outY) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _writeScalarKeyframes(StringBuffer b, String name, LottieAnimatedScalar? anim, List<_CurveEntry> curves) {
@@ -898,16 +936,20 @@ class LottieGenerator {
         final parts = _groupParts(group);
         final compoundFill = _canUseCompoundFill(fill: parts.fill, shapes: parts.shapes);
         final compoundStroke = _canUseCompoundStroke(fill: parts.fill, stroke: parts.stroke, shapes: parts.shapes);
-        if ((compoundFill || parts.fill == null) && (compoundStroke || parts.stroke == null)) continue;
+        final directPaint = (!compoundFill && parts.fill != null) || (!compoundStroke && parts.stroke != null);
+        if (!directPaint && !compoundFill) continue;
 
         final shapes = parts.shapes;
         for (var shapeIndex = 0; shapeIndex < shapes.length; shapeIndex++) {
           final shape = shapes[shapeIndex];
           if (shape is LottieRect) {
-            b.writeln(
-              '  static final RRect _rrect${layerIndex}_${groupIndex}_$shapeIndex = ${_rrectExpression(shape)};',
-            );
-          } else if (shape is LottieEllipse) {
+            final name = '_rrect${layerIndex}_${groupIndex}_$shapeIndex';
+            if (shape.hasAnimatedSize) {
+              _writeAnimatedRect(b, name, shape, trackRevision: compoundFill);
+            } else if (directPaint) {
+              b.writeln('  static final RRect $name = ${_rrectExpression(shape)};');
+            }
+          } else if (shape is LottieEllipse && directPaint) {
             b.writeln(
               '  static final Rect _ellipseRect${layerIndex}_${groupIndex}_$shapeIndex = '
               '${_ellipseRectExpression(shape)};',
@@ -917,6 +959,36 @@ class LottieGenerator {
       }
     }
     b.writeln();
+  }
+
+  void _writeAnimatedRect(StringBuffer b, String name, LottieRect rect, {required bool trackRevision}) {
+    _writeScalarKeyframes(b, '${name}Width', rect.animatedWidth, _curves);
+    _writeScalarKeyframes(b, '${name}Height', rect.animatedHeight, _curves);
+    final width = rect.animatedWidth == null ? _fmt(rect.width) : '${name}Width(frame)';
+    final height = rect.animatedHeight == null ? _fmt(rect.height) : '${name}Height(frame)';
+    final changing = [if (rect.animatedWidth != null) 'Width', if (rect.animatedHeight != null) 'Height'];
+    if (trackRevision) b.writeln('  int ${name}Revision = 0;');
+    b.writeln('  late RRect ${name}Value;');
+    for (final axis in changing) {
+      b.writeln('  double ${name}Last$axis = double.nan;');
+    }
+    b.writeln('  RRect $name(double frame) {');
+    b.writeln('    ${rect.animatedWidth == null ? 'const' : 'final'} halfWidth = $width / 2;');
+    b.writeln('    ${rect.animatedHeight == null ? 'const' : 'final'} halfHeight = $height / 2;');
+    final matches = changing.map((axis) => '${name}Last$axis == half$axis').join(' && ');
+    b.writeln('    if ($matches) return ${name}Value;');
+    for (final axis in changing) {
+      b.writeln('    ${name}Last$axis = half$axis;');
+    }
+    if (trackRevision) b.writeln('    ${name}Revision++;');
+    final x = _fmt(rect.positionX);
+    final y = _fmt(rect.positionY);
+    final radius = _fmt(rect.cornerRadius);
+    b.writeln(
+      '    return ${name}Value = RRect.fromLTRBXY($x - halfWidth, $y - halfHeight, '
+      '$x + halfWidth, $y + halfHeight, $radius, $radius);',
+    );
+    b.writeln('  }');
   }
 
   void _writePathData(StringBuffer b) {
@@ -1274,13 +1346,17 @@ class LottieGenerator {
   }) {
     final dependencies = <String>[
       for (var index = 0; index < shapes.length; index++)
-        if (shapes[index] case final LottiePath path when path.hasAnimatedGeometry)
-          '__path${layerIndex}_${groupIndex}_$index',
+        if (shapes[index] case LottiePath(hasAnimatedGeometry: true))
+          '__path${layerIndex}_${groupIndex}_$index'
+        else if (shapes[index] case LottieRect(hasAnimatedSize: true))
+          '_rrect${layerIndex}_${groupIndex}_$index',
     ];
     if (dependencies.isNotEmpty) {
       for (var index = 0; index < shapes.length; index++) {
         final shape = shapes[index];
-        if (shape is LottieRect) b.writeln('  static final RRect ${name}RRect$index = ${_rrectExpression(shape)};');
+        if (shape is LottieRect && !shape.hasAnimatedSize) {
+          b.writeln('  static final RRect ${name}RRect$index = ${_rrectExpression(shape)};');
+        }
         if (shape is LottieEllipse) {
           b.writeln('  static final Rect ${name}Rect$index = ${_ellipseRectExpression(shape)};');
         }
@@ -1294,7 +1370,9 @@ class LottieGenerator {
     }
     for (var shapeIndex = 0; shapeIndex < shapes.length; shapeIndex++) {
       final shape = shapes[shapeIndex];
-      if (shape is LottieRect) {
+      if (shape is LottieRect && shape.hasAnimatedSize) {
+        b.writeln('    ..addRRect(_rrect${layerIndex}_${groupIndex}_${shapeIndex}Value)');
+      } else if (shape is LottieRect) {
         b.writeln('    ..addRRect(${dependencies.isEmpty ? _rrectExpression(shape) : '${name}RRect$shapeIndex'})');
       } else if (shape is LottieEllipse) {
         b.writeln('    ..addOval(${dependencies.isEmpty ? _ellipseRectExpression(shape) : '${name}Rect$shapeIndex'})');
@@ -1321,7 +1399,7 @@ class LottieGenerator {
       for (var index = 0; index < dependencies.length; index++)
         '${name}Revision$index == ${dependencies[index]}Revision',
     ].join(' && ');
-    b.writeln('    if ($unchanged) return ${name}Value;');
+    b.writeln('    if ($unchanged) { return ${name}Value; }');
     for (var index = 0; index < dependencies.length; index++) {
       b.writeln('    ${name}Revision$index = ${dependencies[index]}Revision;');
     }
@@ -2240,6 +2318,17 @@ class LottieGenerator {
     return _fmt(_staticScalarValue(animation, fallback: fallback));
   }
 
+  Map<LottieGroupTransform, String> _flatGroupTransformPrefixes(LottieLayer layer, int layerIndex) {
+    final prefixes = <LottieGroupTransform, String>{};
+    for (var i = 0; i < layer.shapeGroups.length; i++) {
+      final transforms = _groupTransforms(layer.shapeGroups[i]);
+      for (var j = 0; j < transforms.length; j++) {
+        prefixes.putIfAbsent(transforms[j], () => '_group${layerIndex}_${i}_$j');
+      }
+    }
+    return prefixes;
+  }
+
   void _writeShapeGroups(
     StringBuffer b,
     LottieLayer layer,
@@ -2260,15 +2349,29 @@ class LottieGenerator {
       );
       return;
     }
+    final prefixes = _flatGroupTransformPrefixes(layer, layerIndex);
+    final active = <LottieGroupTransform>[];
     for (var groupIndex = layer.shapeGroups.length - 1; groupIndex >= 0; groupIndex--) {
-      _writeDrawGroup(
-        b,
-        layer.shapeGroups[groupIndex],
-        layerIndex,
-        groupIndex,
-        customizations,
-        renderMode: renderMode,
-      );
+      final group = layer.shapeGroups[groupIndex];
+      if (_isDefinitelyEmptyGroup(group) || _groupParts(group).shapes.isEmpty) continue;
+      final ancestors = group.ancestorTransforms.where(_hasGroupGeometryTransform).toList();
+      var shared = 0;
+      while (shared < active.length && shared < ancestors.length && identical(active[shared], ancestors[shared])) {
+        shared++;
+      }
+      while (active.length > shared) {
+        active.removeLast();
+        b.writeln('    canvas.restore();');
+      }
+      for (final transform in ancestors.skip(shared)) {
+        b.writeln('    canvas.save();');
+        _writeGroupTransform(b, transform, prefixes[transform]!);
+        active.add(transform);
+      }
+      _writeDrawGroup(b, group, layerIndex, groupIndex, customizations, prefixes, renderMode: renderMode);
+    }
+    for (final _ in active) {
+      b.writeln('    canvas.restore();');
     }
   }
 
@@ -2293,7 +2396,7 @@ class LottieGenerator {
     b.writeln('    // Group: ${group.name}');
     if (hasTransform) b.writeln('    canvas.save();');
     for (var transformIndex = 0; transformIndex < transforms.length; transformIndex++) {
-      _writeHierarchyTransform(b, transforms[transformIndex], layerIndex, groupId, transformIndex);
+      _writeGroupTransform(b, transforms[transformIndex], '_treeGroup${layerIndex}_${groupId}_$transformIndex');
     }
 
     final paints = <int, _HierarchyPaint>{
@@ -2328,22 +2431,22 @@ class LottieGenerator {
     if (hasTransform) b.writeln('    canvas.restore();');
   }
 
-  void _writeHierarchyTransform(
-    StringBuffer b,
-    LottieGroupTransform transform,
-    int layerIndex,
-    int groupId,
-    int transformIndex,
-  ) {
-    final prefix = '_treeGroup${layerIndex}_${groupId}_$transformIndex';
+  void _writeGroupTransform(StringBuffer b, LottieGroupTransform transform, String prefix) {
     final x = _groupPosition(transform.animatedPositionX, fallback: transform.positionX, method: '${prefix}X');
     final y = _groupPosition(transform.animatedPositionY, fallback: transform.positionY, method: '${prefix}Y');
     if (x != '0' || y != '0') b.writeln('    canvas.translate($x, $y);');
-    if (transform.rotation != 0) {
-      b.writeln('    canvas.rotate(${_fmt(transform.rotation)} * math.pi / 180);');
+    if (transform.animatedRotation != null || transform.rotation != 0) {
+      final angle = transform.animatedRotation == null ? _fmt(transform.rotation) : '${prefix}Rotation(frame)';
+      b.writeln('    canvas.rotate($angle * math.pi / 180);');
     }
-    if (transform.scaleX != 100 || transform.scaleY != 100) {
-      b.writeln('    canvas.scale(${_fmt(transform.scaleX / 100)}, ${_fmt(transform.scaleY / 100)});');
+    if (transform.hasScale) {
+      final sx = transform.animatedScaleX == null ? _fmt(transform.scaleX / 100) : '${prefix}ScaleX(frame) / 100';
+      if (_hasUniformAnimatedScale(transform)) {
+        b.writeln('    canvas.scale($sx);');
+      } else {
+        final sy = transform.animatedScaleY == null ? _fmt(transform.scaleY / 100) : '${prefix}ScaleY(frame) / 100';
+        b.writeln('    canvas.scale($sx, $sy);');
+      }
     }
     if (transform.anchorX != 0 || transform.anchorY != 0) {
       b.writeln('    canvas.translate(${_fmt(-transform.anchorX)}, ${_fmt(-transform.anchorY)});');
@@ -2447,7 +2550,8 @@ class LottieGenerator {
     LottieGroup group,
     int layerIndex,
     int groupIndex,
-    _CustomizationPlan customizations, {
+    _CustomizationPlan customizations,
+    Map<LottieGroupTransform, String> prefixes, {
     required _LottieRenderMode renderMode,
   }) {
     final parts = _groupParts(group);
@@ -2459,33 +2563,15 @@ class LottieGenerator {
     if (shapes.isEmpty || _isDefinitelyEmptyGroup(group)) return;
 
     b.writeln('    // Group: ${group.name}');
-    final transforms = _groupTransforms(group);
-    final hasTransform = transforms.any(
-      (transform) =>
-          _groupPosition(transform.animatedPositionX, fallback: transform.positionX, method: '') != '0' ||
-          _groupPosition(transform.animatedPositionY, fallback: transform.positionY, method: '') != '0' ||
-          transform.rotation != 0 ||
-          transform.scaleX != 100 ||
-          transform.scaleY != 100 ||
-          transform.anchorX != 0 ||
-          transform.anchorY != 0,
-    );
-    if (hasTransform) b.writeln('    canvas.save();');
-    for (var transformIndex = 0; transformIndex < transforms.length; transformIndex++) {
-      final transform = transforms[transformIndex];
-      final prefix = '_group${layerIndex}_${groupIndex}_$transformIndex';
-      final x = _groupPosition(transform.animatedPositionX, fallback: transform.positionX, method: '${prefix}X');
-      final y = _groupPosition(transform.animatedPositionY, fallback: transform.positionY, method: '${prefix}Y');
-      if (x != '0' || y != '0') b.writeln('    canvas.translate($x, $y);');
-      if (transform.rotation != 0) b.writeln('    canvas.rotate(${_fmt(transform.rotation)} * math.pi / 180);');
-      if (transform.scaleX != 100 || transform.scaleY != 100) {
-        b.writeln('    canvas.scale(${_fmt(transform.scaleX / 100)}, ${_fmt(transform.scaleY / 100)});');
-      }
-      if (transform.anchorX != 0 || transform.anchorY != 0) {
-        b.writeln('    canvas.translate(${_fmt(-transform.anchorX)}, ${_fmt(-transform.anchorY)});');
-      }
+    final transforms = group.items.whereType<LottieGroupTransform>();
+    final hasTransform = transforms.any(_hasGroupGeometryTransform);
+    final repeater = group.repeater;
+    if (hasTransform || repeater != null) b.writeln('    canvas.save();');
+    for (final transform in transforms) {
+      _writeGroupTransform(b, transform, prefixes[transform]!);
     }
-    final groupOpacity = transforms.fold<double>(1, (opacity, transform) => opacity * transform.opacity / 100);
+    final groupOpacity = _groupTransforms(group)
+        .fold<double>(1, (opacity, transform) => opacity * transform.opacity / 100);
     if (trim != null) {
       _writeDrawTrimmedGroup(
         b,
@@ -2502,6 +2588,19 @@ class LottieGenerator {
         b.writeln('    canvas.restore();');
       }
       return;
+    }
+    if (repeater != null) {
+      final last = repeater.copies - 1;
+      final start = _fmt(repeater.startOpacity);
+      final step = (repeater.endOpacity - repeater.startOpacity) / repeater.copies;
+      final opacity = step == 0 ? start : '($start + copy * ${_fmt(step)})';
+      b.writeln('    final repeatOpacity$groupIndex = layerOpacity;');
+      // Composite mode 1 places the original rectangle above its later copies.
+      if (last > 0 && (repeater.dx != 0 || repeater.dy != 0)) {
+        b.writeln('    canvas.translate(${_fmt(last * repeater.dx)}, ${_fmt(last * repeater.dy)});');
+      }
+      b.writeln('    for (var copy = $last; copy >= 0; copy--) {');
+      b.writeln('    final layerOpacity = repeatOpacity$groupIndex * $opacity;');
     }
     final compoundFill = _canUseCompoundFill(fill: fill, shapes: shapes);
     final compoundStroke = _canUseCompoundStroke(fill: fill, stroke: stroke, shapes: shapes);
@@ -2538,6 +2637,7 @@ class LottieGenerator {
           layerIndex,
           groupIndex,
           shapeIndex,
+          shape,
           shapeFill,
           shapeStroke,
           customizations,
@@ -2572,7 +2672,13 @@ class LottieGenerator {
       }
     }
 
-    if (hasTransform) {
+    if (repeater != null) {
+      if (repeater.dx != 0 || repeater.dy != 0) {
+        b.writeln('    canvas.translate(${_fmt(-repeater.dx)}, ${_fmt(-repeater.dy)});');
+      }
+      b.writeln('    }');
+    }
+    if (hasTransform || repeater != null) {
       b.writeln('    canvas.restore();');
     }
   }
@@ -2667,7 +2773,7 @@ class LottieGenerator {
 
   bool _containsNonIdentityGroupScale(LottieGroup group) {
     for (final item in group.items) {
-      if (item is LottieGroupTransform && (item.scaleX != 100 || item.scaleY != 100)) return true;
+      if (item is LottieGroupTransform && item.hasScale) return true;
       if (item is LottieGroup && _containsNonIdentityGroupScale(item)) return true;
     }
     return false;
@@ -2697,7 +2803,11 @@ class LottieGenerator {
   bool _containsAnimatedGroupTransform(LottieGroup group) {
     for (final item in group.items) {
       if (item is LottieGroupTransform &&
-          (_hasAnimatedValue(item.animatedPositionX) || _hasAnimatedValue(item.animatedPositionY))) {
+          (_hasAnimatedValue(item.animatedPositionX) ||
+              _hasAnimatedValue(item.animatedPositionY) ||
+              item.animatedScaleX != null ||
+              item.animatedScaleY != null ||
+              item.animatedRotation != null)) {
         return true;
       }
       if (item is LottieGroup && _containsAnimatedGroupTransform(item)) return true;
@@ -2808,9 +2918,9 @@ class LottieGenerator {
         _hasAnimatedValue(transform.animatedPositionY) ||
         _staticScalarValue(transform.animatedPositionX, fallback: transform.positionX) != 0 ||
         _staticScalarValue(transform.animatedPositionY, fallback: transform.positionY) != 0 ||
+        transform.animatedRotation != null ||
         transform.rotation != 0 ||
-        transform.scaleX != 100 ||
-        transform.scaleY != 100 ||
+        transform.hasScale ||
         transform.anchorX != 0 ||
         transform.anchorY != 0;
   }
@@ -2945,6 +3055,7 @@ class LottieGenerator {
   }
 
   bool _canUseCompoundFill({required LottieFill? fill, required List<LottieShape> shapes}) {
+    if (shapes case [LottieRect(hasAnimatedSize: true)]) return false;
     return fill != null && shapes.isNotEmpty && (fill.fillRule == 2 || shapes.length > 1);
   }
 
@@ -2960,8 +3071,9 @@ class LottieGenerator {
     final name = '_compoundFillPath${layerIndex}_$groupIndex';
     final animated = _groupParts(_layers.firstWhere((entry) => entry.index == layerIndex).layer.shapeGroups[groupIndex])
         .shapes
-        .whereType<LottiePath>()
-        .any((path) => path.hasAnimatedGeometry);
+        .any(
+          (shape) => shape is LottiePath && shape.hasAnimatedGeometry || shape is LottieRect && shape.hasAnimatedSize,
+        );
     final pathName = animated ? '$name(frame)' : name;
     final paintName = 'compoundFillPaint$groupIndex';
     final opacity = _fmt(fill.opacity / 100 * groupOpacity);
@@ -3005,6 +3117,7 @@ class LottieGenerator {
     int layerIndex,
     int groupIndex,
     int shapeIndex,
+    LottieRect rect,
     LottieFill? fill,
     LottieStroke? stroke,
     _CustomizationPlan customizations,
@@ -3014,7 +3127,9 @@ class LottieGenerator {
     if (fill == null && stroke == null) return;
 
     final suffix = '${groupIndex}_$shapeIndex';
-    final bodyName = '_rrect${layerIndex}_${groupIndex}_$shapeIndex';
+    final name = '_rrect${layerIndex}_${groupIndex}_$shapeIndex';
+    final bodyName = rect.hasAnimatedSize ? 'rect$suffix' : name;
+    if (rect.hasAnimatedSize) b.writeln('    final $bodyName = $name(frame);');
     final fillPaintName = 'fillPaint$suffix';
     final strokePaintName = 'strokePaint$suffix';
 

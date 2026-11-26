@@ -123,9 +123,16 @@ Supported:
   together using shared easing. Put the gradient fill in the same group as its
   shapes. Gradient fills keep their exported colors.
 - reusable precomposition layers, with sizes on their layers or assets
-- nested shape groups with inherited fills and strokes and animated positions
+- nested shape groups with inherited fills and strokes and animated position, scale, and rotation
+- animated rectangle width and height for individually painted rectangles or groups of clockwise rectangles sharing a fill, with
+  fixed position and corner radius, including rounded rectangles
 - adjacent alpha and inverted-alpha mattes, where one layer's opacity reveals
   or hides the next layer
+- one repeater after a rectangle and its fill, including gradient fills. Use
+  1–64 copies, fixed translation and opacity endpoints, zero offset, and
+  composite mode 1. The containing group can animate its transform.
+  Other shape-group repeaters stop generation. Remove the repeater or export
+  its copies as separate shapes if the animation needs an unsupported setup.
 - parented layer transforms, including null controller layers
 - static text layers, including point text and paragraph boxes
 - static, non-inverted, fully opaque additive masks with zero expansion
@@ -171,10 +178,12 @@ Not supported:
   matte references, chains of masked matte sources, gradient strokes, or 3D layers
 - moving gradient endpoints or stops, off-center radial gradients, and animated
   fill opacity. Use a layer opacity animation for a fade.
-- animated group scale, rotation, anchor, or opacity; move geometric transforms
+- animated group anchor or opacity; move animated anchors
   to layers, or flatten or precompose groups that animate opacity
+- animated rectangle sizes combined with trim paths, mixed compound shapes, or layers
+  that require nested paint compositing
 - trim paths spanning nested groups
-- paint stacks that cross an animated nested-group position when flattening would
+- paint stacks that cross an animated nested-group transform when flattening would
   duplicate or discard a fill or stroke, and parent strokes across animated,
   scaled nested geometry; flatten the affected groups before exporting
 - partial group opacity across multiple draws or nested paint stacks that require

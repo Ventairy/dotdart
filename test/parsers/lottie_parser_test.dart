@@ -289,6 +289,52 @@ void main() {
       expect((result.animation.compositions.length, result.warnings.length), (2, 0));
     });
 
+    test('when group transforms and rectangle sizes animate, it should retain only the changing axes', () {
+      final layer = LottieParser.parse(File('example/assets/lotties/group_motion.json').readAsStringSync())
+          .animation
+          .layers
+          .single;
+      final group = layer.shapeGroups.first;
+      final transform = group.ancestorTransforms.single;
+      final rect = group.items.whereType<LottieRect>().first;
+      expect(
+        (
+          transform.animatedRotation!.keyframes.last.start,
+          transform.animatedScaleY!.keyframes.first.outX,
+          rect.animatedWidth,
+          rect.animatedHeight!.keyframes.last.start,
+        ),
+        (90, 0.3, null, 4),
+      );
+    });
+
+    test('when a resizing rectangle shares paint with an ellipse, it should report the unsupported geometry', () {
+      final asset = File('example/assets/lotties/group_motion.json');
+      final root = jsonDecode(asset.readAsStringSync()) as Map<String, Object?>;
+      final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;
+      final parent = (layer['shapes']! as List<Object?>).first! as Map<String, Object?>;
+      final child = (parent['it']! as List<Object?>).first! as Map<String, Object?>;
+      (child['it']! as List<Object?>).insert(0, {
+        'ty': 'el',
+        'p': {
+          'k': [0, 0],
+        },
+        's': {
+          'k': [8, 8],
+        },
+      });
+      expect(
+        () => LottieParser.parse(jsonEncode(root)),
+        throwsA(
+          isA<DotdartUnsupportedFeatureException>().having(
+            (e) => e.message,
+            'message',
+            contains('animated rectangle size'),
+          ),
+        ),
+      );
+    });
+
     test('when nested groups move, it should retain inherited paint and animated translation', () {
       final result = LottieParser.parse(File('example/assets/lotties/alpha_matte.json').readAsStringSync());
       final group = result.animation.compositions['inner']!.layers.first.shapeGroups.single;

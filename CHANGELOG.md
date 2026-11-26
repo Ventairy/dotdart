@@ -1,3 +1,15 @@
+## 0.14.0
+
+- Render translated copies of a filled Lottie rectangle with a static repeater,
+  including fades across the copies.
+- **Migration:** Unsupported shape-group repeaters now stop generation. If an
+  asset previously built with a skipped repeater, remove the repeater, export
+  the copies as separate shapes, or use the supported rectangle repeater setup.
+
+- Support animated Lottie shape-group scale and rotation, and animate rectangle
+  width and height, including rectangles sharing a fill. Shared group transforms
+  run once across adjacent child shapes, and held sizes reuse rectangle geometry.
+
 ## 0.13.0
 
 - Support animated Lottie solid fills and fixed-position linear and centered
