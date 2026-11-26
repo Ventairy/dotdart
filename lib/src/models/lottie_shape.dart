@@ -78,6 +78,8 @@ class LottieRect extends LottieShape {
     required this.width,
     required this.height,
     required this.cornerRadius,
+    this.animatedWidth,
+    this.animatedHeight,
     this.direction = 1,
   });
 
@@ -92,6 +94,10 @@ class LottieRect extends LottieShape {
 
   /// Total height.
   final double height;
+
+  final LottieAnimatedScalar? animatedWidth;
+  final LottieAnimatedScalar? animatedHeight;
+  bool get hasAnimatedSize => animatedWidth != null || animatedHeight != null;
 
   /// Corner radius.
   final double cornerRadius;
@@ -223,6 +229,9 @@ class LottieGroupTransform extends LottieShape {
     this.positionY = 0,
     this.anchorX = 0,
     this.anchorY = 0,
+    this.animatedScaleX,
+    this.animatedScaleY,
+    this.animatedRotation,
     this.scaleX = 100,
     this.scaleY = 100,
     this.rotation = 0,
@@ -234,6 +243,12 @@ class LottieGroupTransform extends LottieShape {
 
   /// Animated vertical translation, when present.
   final LottieAnimatedScalar? animatedPositionY;
+
+  final LottieAnimatedScalar? animatedScaleX;
+  final LottieAnimatedScalar? animatedScaleY;
+  final LottieAnimatedScalar? animatedRotation;
+
+  bool get hasScale => animatedScaleX != null || animatedScaleY != null || scaleX != 100 || scaleY != 100;
 
   final double positionX;
   final double positionY;
@@ -247,7 +262,9 @@ class LottieGroupTransform extends LottieShape {
 
 /// A shape group (`ty: "gr"`) containing nested items.
 class LottieGroup extends LottieShape {
-  const LottieGroup({required this.name, required this.items, this.ancestorTransforms = const []});
+  const LottieGroup({required this.name, required this.items, this.ancestorTransforms = const [], this.repeater});
+
+  final LottieRepeater? repeater;
 
   /// Group name (Lottie `nm`).
   final String name;
@@ -258,3 +275,6 @@ class LottieGroup extends LottieShape {
   /// Child shapes, fills, strokes, and transforms.
   final List<LottieShape> items;
 }
+
+/// Build-time values for a translated stack of filled rectangles.
+typedef LottieRepeater = ({int copies, double dx, double dy, double startOpacity, double endOpacity});

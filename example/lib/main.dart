@@ -118,6 +118,10 @@ class _DotdartExamplePageState extends State<DotdartExamplePage> with WidgetsBin
             child: $Lotties.colorFills(width: 120, playback: LottiePlayback.loop),
           ),
           _ExampleCard(
+            label: 'Animated group transforms and rectangle size',
+            child: $Lotties.groupMotion(width: 100, playback: LottiePlayback.loop),
+          ),
+          _ExampleCard(
             label: 'Animated Lottie path geometry',
             child: $Lotties.pathMorph(width: 100, playback: LottiePlayback.loop),
           ),

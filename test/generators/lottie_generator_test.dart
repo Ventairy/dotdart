@@ -26,6 +26,22 @@ void main() {
     );
   });
 
+  test('when siblings share animated scale and rotation, it should transform once and cache held rectangle sizes', () {
+    final asset = File('example/assets/lotties/group_motion.json');
+    final animation = LottieParser.parse(asset.readAsStringSync()).animation;
+    final code = LottieGenerator(animation, asset.path).generateWidgetClass();
+    expect(
+      (
+        RegExp(r'canvas.rotate\(_group').allMatches(code).length,
+        RegExp(r'canvas.scale\(_group').allMatches(code).length,
+        code.contains('ScaleY(double frame)'),
+        code.contains('LastHeight == halfHeight') && code.contains('..addRRect(_rrect0_0_1Value)'),
+        code.contains('saveLayer('),
+      ),
+      (1, 1, false, true, false),
+    );
+  });
+
   for (final (asset, expectations) in [
     (
       'path_morph',
