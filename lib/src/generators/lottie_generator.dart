@@ -116,7 +116,7 @@ class LottieGenerator {
     for (final entry in _renderLayers) {
       if (_isDefinitelyEmptyLayer(entry)) continue;
       final tree = _shapeTreeFor(entry.layer);
-      if (tree == null) continue;
+      if (tree == null || tree.rotatingChildWithSharedFill != null) continue;
       final groupIds = _hierarchyGroupIds(tree);
       final transparentGroups = _transparentHierarchyGroups(tree);
       for (final group in groupIds.keys) {
@@ -1423,6 +1423,18 @@ class LottieGenerator {
           _ => 1,
         };
         final name = '_treePaintPath${layerIndex}_${entry.value}_${paint.pathIndex}';
+        final rotating = entry.key.rotatingChildWithSharedFill;
+        if (rotating != null) {
+          _writeRotatingCompoundPath(
+            b,
+            paint,
+            layerIndex: layerIndex,
+            name: name,
+            rotatingId: groupIds[rotating]!,
+            transform: rotating.items.whereType<LottieGroupTransform>().single,
+          );
+          continue;
+        }
         final dynamicGeometries = paint.geometries
             .where(
               (geometry) => geometry.shape is LottiePath && (geometry.shape as LottiePath).hasAnimatedGeometry,
@@ -1484,6 +1496,44 @@ class LottieGenerator {
         b.writeln();
       }
     }
+  }
+
+  void _writeRotatingCompoundPath(
+    StringBuffer b,
+    _HierarchyPaint paint, {
+    required int layerIndex,
+    required String name,
+    required int rotatingId,
+    required LottieGroupTransform transform,
+  }) {
+    b.writeln('  final Matrix4 ${name}Matrix = Matrix4.identity();');
+    b.writeln('  final Path ${name}Value = Path();');
+    b.writeln('  double? ${name}Angle;');
+    b.writeln('  Path $name(double frame) {');
+    b.writeln('    final angle = _treeGroup${layerIndex}_${rotatingId}_0Rotation(frame);');
+    b.writeln('    if (angle == ${name}Angle) return ${name}Value;');
+    b.writeln('    ${name}Angle = angle;');
+    b.writeln('    ${name}Matrix..setIdentity()');
+    if (transform.positionX != 0 || transform.positionY != 0) {
+      b.writeln('      ..translateByDouble(${_fmt(transform.positionX)}, ${_fmt(transform.positionY)}, 0, 1)');
+    }
+    b.writeln('      ..rotateZ(angle * math.pi / 180)');
+    if (transform.hasScale) {
+      b.writeln('      ..scaleByDouble(${_fmt(transform.scaleX / 100)}, ${_fmt(transform.scaleY / 100)}, 1, 1)');
+    }
+    if (transform.anchorX != 0 || transform.anchorY != 0) {
+      b.writeln('      ..translateByDouble(${_fmt(-transform.anchorX)}, ${_fmt(-transform.anchorY)}, 0, 1)');
+    }
+    b.writeln('    ;');
+    b.writeln('    return ${name}Value..reset()');
+    if ((paint.paint as LottieFill).fillRule == 2) b.writeln('      ..fillType = PathFillType.evenOdd');
+    for (final geometry in paint.geometries) {
+      final path = '__treePath${layerIndex}_${geometry.groupId}_${geometry.itemIndex}';
+      final matrix = geometry.groupId == rotatingId ? ', matrix4: ${name}Matrix.storage' : '';
+      b.writeln('      ..addPath($path, Offset.zero$matrix)');
+    }
+    b.writeln('    ;');
+    b.writeln('  }');
   }
 
   void _writeHierarchyGeometry(StringBuffer b, int layerIndex, _HierarchyGeometry geometry) {
@@ -2411,6 +2461,7 @@ class LottieGenerator {
           layerIndex,
           groupId,
           paint,
+          group,
           customizations,
           groupOpacity,
           renderMode: renderMode,
@@ -2458,14 +2509,17 @@ class LottieGenerator {
     int layerIndex,
     int groupId,
     _HierarchyPaint entry,
+    LottieGroup group,
     _CustomizationPlan customizations,
     double groupOpacity, {
     required _LottieRenderMode renderMode,
   }) {
     final name = '_treePaintPath${layerIndex}_${groupId}_${entry.pathIndex}';
-    final animated = entry.geometries.any(
-      (geometry) => geometry.shape is LottiePath && (geometry.shape as LottiePath).hasAnimatedGeometry,
-    );
+    final animated =
+        group.rotatingChildWithSharedFill != null ||
+        entry.geometries.any(
+          (geometry) => geometry.shape is LottiePath && (geometry.shape as LottiePath).hasAnimatedGeometry,
+        );
     final pathName = animated ? '$name(frame)' : name;
     final fillPaint = renderMode.fillPaint;
     final strokePaint = renderMode.strokePaint;
@@ -2745,7 +2799,7 @@ class LottieGenerator {
         !_requiresHierarchyForNestedStrokeScale(tree)) {
       return null;
     }
-    if (!_canRenderHierarchy(tree)) return null;
+    if (tree.rotatingChildWithSharedFill == null && !_canRenderHierarchy(tree)) return null;
     return tree;
   }
 

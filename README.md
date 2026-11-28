@@ -202,6 +202,8 @@ gradient fills with fixed endpoints and stop positions.
 Shape groups can animate position, scale, and rotation. Rectangles can animate width and height while keeping their corners rounded,
 including multiple rectangles that share one fill. A rectangle repeater can
 space copies at a fixed interval and fade them from first to last.
+A rotating path group can share a fill with fixed paths, so a cutout can stay in place while its outline turns.
+
 Supported Lottie paths can animate their vertices and Bézier handles when
 all keyframes have the same vertex count and open or closed status. Generated
 painters reuse path storage and interpolate directly, without parsing JSON or

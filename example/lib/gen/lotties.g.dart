@@ -234,6 +234,9 @@ mixin _DotdartLottieAnimationState<T extends StatefulWidget>
 /// $Lotties.pulse(<params>);
 /// ```
 /// ```dart
+/// $Lotties.rotatingCutout(<params>);
+/// ```
+/// ```dart
 /// $Lotties.trimPath(<params>);
 /// ```
 abstract final class $Lotties {
@@ -402,6 +405,33 @@ abstract final class $Lotties {
     overrides: overrides,
   );
 
+  /// Builds the `RotatingCutout` widget from `rotatingCutout.json`.
+  static Widget rotatingCutout({
+    Key? key,
+    double? width,
+    double? height,
+    bool maintainAspectRatio = true,
+    bool clip = true,
+    double? progress,
+    Duration delay = Duration.zero,
+    Duration? duration,
+    LottiePlayback playback = LottiePlayback.once,
+    bool respectDisableAnimations = true,
+    RotatingCutoutOverrides overrides = const RotatingCutoutOverrides(),
+  }) => _RotatingCutout(
+    key: key,
+    width: width,
+    height: height,
+    maintainAspectRatio: maintainAspectRatio,
+    clip: clip,
+    progress: progress,
+    delay: delay,
+    duration: duration,
+    playback: playback,
+    respectDisableAnimations: respectDisableAnimations,
+    overrides: overrides,
+  );
+
   /// Builds the `TrimPath` widget from `trimPath.json`.
   static Widget trimPath({
     Key? key,
@@ -452,6 +482,11 @@ abstract final class $Lotties {
     'group_motion.json' => groupMotion(key: key, width: width, height: height),
     'path_morph.json' => pathMorph(key: key, width: width, height: height),
     'pulse.json' => pulse(key: key, width: width, height: height),
+    'rotating_cutout.json' => rotatingCutout(
+      key: key,
+      width: width,
+      height: height,
+    ),
     'trim_path.json' => trimPath(key: key, width: width, height: height),
     _ => null,
   };
@@ -13705,6 +13740,247 @@ class _PulsePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PulsePainter oldDelegate) {
+    return oldDelegate._fixedProgress != _fixedProgress ||
+        oldDelegate._canvasScaleX != _canvasScaleX ||
+        oldDelegate._canvasScaleY != _canvasScaleY ||
+        oldDelegate._canvasRect != _canvasRect ||
+        oldDelegate._animationProgress != _animationProgress ||
+        oldDelegate.clip != clip ||
+        oldDelegate.overrides != overrides;
+  }
+}
+
+/// Text and color values that replace defaults in `rotating_cutout.json`.
+final class RotatingCutoutOverrides {
+  /// Creates Lottie value overrides.
+  const RotatingCutoutOverrides({this.color1});
+
+  /// Replacement color for the `unnamed shape` Lottie layer.
+  final Color? color1;
+}
+
+/// A dotdart-generated animated widget from `assets/lotties/rotating_cutout.json`.
+///
+/// Renders a 1033ms animation
+/// (31 frames at 30.0Hz)
+/// on a 64×64 canvas.
+/// No Lottie runtime dependency — the animation is drawn
+/// entirely via [CustomPainter].
+class _RotatingCutout extends StatefulWidget {
+  const _RotatingCutout({
+    super.key,
+    this.width,
+    this.height,
+    this.maintainAspectRatio = true,
+    this.clip = true,
+    this.progress,
+    this.delay = Duration.zero,
+    this.duration,
+    this.playback = LottiePlayback.once,
+    this.respectDisableAnimations = true,
+    this.overrides = const RotatingCutoutOverrides(),
+  });
+
+  static const double _lottieWidth = 64;
+  static const double _lottieHeight = 64;
+  static const int _totalFrames = 31;
+  static const Duration _nativeDuration = Duration(milliseconds: 1033);
+
+  /// Width in logical pixels.
+  final double? width;
+
+  /// Height in logical pixels.
+  final double? height;
+
+  /// When true (default), keeps the native aspect ratio using the larger requested value as the reference. When false, both dimensions are applied as-is and the asset may distort.
+  final bool maintainAspectRatio;
+
+  /// Whether painting is clipped to the Lottie canvas bounds.
+  final bool clip;
+
+  /// Fixed animation progress from 0 to 1.
+  final double? progress;
+
+  /// Non-negative time to wait once before automatic playback starts.
+  final Duration delay;
+
+  /// Positive total playback time. When null, uses the duration from the Lottie file.
+  final Duration? duration;
+
+  /// Whether automatic playback runs once or loops continuously.
+  final LottiePlayback playback;
+
+  /// Whether reduced-motion settings pause playback.
+  final bool respectDisableAnimations;
+
+  /// Text and color values that replace defaults from the Lottie file.
+  final RotatingCutoutOverrides overrides;
+
+  @override
+  State<_RotatingCutout> createState() => _RotatingCutoutState();
+}
+
+class _RotatingCutoutState extends State<_RotatingCutout>
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _DotdartLottieAnimationState<_RotatingCutout> {
+  @override
+  double? get lottieWidgetWidth => widget.width;
+
+  @override
+  double? get lottieWidgetHeight => widget.height;
+
+  @override
+  bool get lottieMaintainAspectRatio => widget.maintainAspectRatio;
+
+  @override
+  double? get lottieProgress => widget.progress;
+
+  @override
+  Duration get lottieDelay => widget.delay;
+
+  @override
+  Duration? get lottieDuration => widget.duration;
+
+  @override
+  LottiePlayback get lottiePlayback => widget.playback;
+
+  @override
+  bool get lottieRespectDisableAnimations => widget.respectDisableAnimations;
+
+  @override
+  Duration get lottieNativeDuration => _RotatingCutout._nativeDuration;
+
+  @override
+  double get lottieCanvasWidth => _RotatingCutout._lottieWidth;
+
+  @override
+  double get lottieCanvasHeight => _RotatingCutout._lottieHeight;
+
+  @override
+  Widget buildPainter({required double width, required double height}) {
+    return SizedBox.fromSize(
+      size: Size(width, height),
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _RotatingCutoutPainter(
+            animationProgress: widget.progress == null ? _controller : null,
+            fixedProgress: (widget.progress ?? 0).clamp(0, 1).toDouble(),
+            canvasScaleX: width / _RotatingCutout._lottieWidth,
+            canvasScaleY: height / _RotatingCutout._lottieHeight,
+            canvasRect: Rect.fromLTWH(0, 0, width, height),
+            clip: widget.clip,
+            overrides: widget.overrides,
+          ),
+          size: Size(width, height),
+        ),
+      ),
+    );
+  }
+}
+
+class _RotatingCutoutPainter extends CustomPainter {
+  _RotatingCutoutPainter({
+    required this._fixedProgress,
+    required this._canvasScaleX,
+    required this._canvasScaleY,
+    required this._canvasRect,
+    required this.clip,
+    required this.overrides,
+    this._animationProgress,
+  }) : super(repaint: _animationProgress);
+
+  final double _fixedProgress;
+  final double _canvasScaleX;
+  final double _canvasScaleY;
+  final Rect _canvasRect;
+  final Animation<double>? _animationProgress;
+
+  final bool clip;
+
+  final RotatingCutoutOverrides overrides;
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+
+  double _treeGroup0_1_0Rotation(double frame) {
+    if (frame <= 0) return 0;
+    if (frame >= 30) return 180;
+    if (frame < 30) {
+      final t = frame / 30;
+      final eased = t;
+      return 0 + 180 * eased;
+    }
+    return 180;
+  }
+
+  static final Path __treePath0_0_1 = Path()
+    ..moveTo(24, 24)
+    ..cubicTo(24, 24, 40, 24, 40, 24)
+    ..cubicTo(40, 24, 40, 40, 40, 40)
+    ..cubicTo(40, 40, 24, 40, 24, 40)
+    ..cubicTo(24, 40, 24, 24, 24, 24)
+    ..close();
+
+  static final Path __treePath0_1_0 = Path()
+    ..moveTo(4, 0)
+    ..cubicTo(4, 0, 20, 0, 20, 0)
+    ..cubicTo(20, 0, 20, 8, 20, 8)
+    ..cubicTo(20, 8, 4, 8, 4, 8)
+    ..cubicTo(4, 8, 4, 0, 4, 0)
+    ..close();
+
+  final Matrix4 _treePaintPath0_0_2Matrix = Matrix4.identity();
+  final Path _treePaintPath0_0_2Value = Path();
+  double? _treePaintPath0_0_2Angle;
+  Path _treePaintPath0_0_2(double frame) {
+    final angle = _treeGroup0_1_0Rotation(frame);
+    if (angle == _treePaintPath0_0_2Angle) return _treePaintPath0_0_2Value;
+    _treePaintPath0_0_2Angle = angle;
+    _treePaintPath0_0_2Matrix
+      ..setIdentity()
+      ..translateByDouble(32, 32, 0, 1)
+      ..rotateZ(angle * math.pi / 180)
+      ..translateByDouble(-4, -4, 0, 1);
+    return _treePaintPath0_0_2Value
+      ..reset()
+      ..fillType = PathFillType.evenOdd
+      ..addPath(
+        __treePath0_1_0,
+        Offset.zero,
+        matrix4: _treePaintPath0_0_2Matrix.storage,
+      )
+      ..addPath(__treePath0_0_1, Offset.zero);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final progress = _animationProgress?.value ?? _fixedProgress;
+    final frame = math.min(30.999999, progress * _RotatingCutout._totalFrames);
+
+    canvas.save();
+    if (clip) canvas.clipRect(_canvasRect);
+    canvas.scale(_canvasScaleX, _canvasScaleY);
+
+    _draw0(canvas, frame, 1);
+
+    canvas.restore();
+  }
+
+  void _draw0(Canvas canvas, double frame, double inheritedOpacity) {
+    final layerOpacity = inheritedOpacity * 1;
+    if (layerOpacity <= 0) return;
+    // Group:
+    final treeFillPaint0_2 = _fillPaint
+      ..color = _dotdartApplyOpacity(
+        overrides.color1 ?? const Color(0xffff0000),
+        layerOpacity * 1,
+      );
+    canvas.drawPath(_treePaintPath0_0_2(frame), treeFillPaint0_2);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RotatingCutoutPainter oldDelegate) {
     return oldDelegate._fixedProgress != _fixedProgress ||
         oldDelegate._canvasScaleX != _canvasScaleX ||
         oldDelegate._canvasScaleY != _canvasScaleY ||
