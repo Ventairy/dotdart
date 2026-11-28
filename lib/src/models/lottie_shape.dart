@@ -274,6 +274,36 @@ class LottieGroup extends LottieShape {
 
   /// Child shapes, fills, strokes, and transforms.
   final List<LottieShape> items;
+
+  /// A single rotating child whose static paths share the final fill with
+  /// static paths directly in this group.
+  LottieGroup? get rotatingChildWithSharedFill {
+    if (items.isEmpty || items.last is! LottieFill || items.whereType<LottieFill>().length != 1) return null;
+    if (!items.any((item) => item is LottiePath) ||
+        items.any(
+          (item) => !(item is LottiePath && !item.hasAnimatedGeometry || item is LottieGroup || item is LottieFill),
+        )) {
+      return null;
+    }
+    final child = items.whereType<LottieGroup>().singleOrNull;
+    if (child == null ||
+        child.repeater != null ||
+        child.items.whereType<LottiePath>().isEmpty ||
+        child.items.any((item) => !(item is LottiePath && !item.hasAnimatedGeometry || item is LottieGroupTransform))) {
+      return null;
+    }
+    final transform = child.items.whereType<LottieGroupTransform>().singleOrNull;
+    if (transform == null ||
+        transform.animatedRotation == null ||
+        transform.opacity != 100 ||
+        transform.animatedPositionX != null ||
+        transform.animatedPositionY != null ||
+        transform.animatedScaleX != null ||
+        transform.animatedScaleY != null) {
+      return null;
+    }
+    return child;
+  }
 }
 
 /// Build-time values for a translated stack of filled rectangles.

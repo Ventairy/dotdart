@@ -349,6 +349,20 @@ void main() {
       );
     });
 
+    test('when a rotating path shares a fill with a fixed path, it should retain both contours', () {
+      final result = LottieParser.parse(File('example/assets/lotties/rotating_cutout.json').readAsStringSync());
+      final items = result.animation.layers.single.shapeTree!.items;
+      expect(
+        (
+          items.whereType<LottieGroup>().single.items.whereType<LottiePath>().length,
+          items.whereType<LottiePath>().length,
+          items.whereType<LottieFill>().single.fillRule,
+          result.warnings.length,
+        ),
+        (1, 1, 2, 0),
+      );
+    });
+
     test('when parent and child fills cross an animated nested group, it should reject the lossy paint stack', () {
       final root = jsonDecode(_minimalLottie) as Map<String, Object?>;
       final layer = (root['layers']! as List<Object?>).single! as Map<String, Object?>;

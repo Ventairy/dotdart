@@ -1,3 +1,7 @@
+## 0.15.0
+
+- Preserve a shared Lottie fill across rotating and fixed paths, including transparent cutouts.
+
 ## 0.14.0
 
 - Render translated copies of a filled Lottie rectangle with a static repeater,

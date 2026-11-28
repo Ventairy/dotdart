@@ -123,6 +123,7 @@ Supported:
   together using shared easing. Put the gradient fill in the same group as its
   shapes. Gradient fills keep their exported colors.
 - reusable precomposition layers, with sizes on their layers or assets
+- a final fill shared by fixed paths and one rotating child group of fixed paths, including even-odd cutouts
 - nested shape groups with inherited fills and strokes and animated position, scale, and rotation
 - animated rectangle width and height for individually painted rectangles or groups of clockwise rectangles sharing a fill, with
   fixed position and corner radius, including rounded rectangles
@@ -184,7 +185,7 @@ Not supported:
   that require nested paint compositing
 - trim paths spanning nested groups
 - paint stacks that cross an animated nested-group transform when flattening would
-  duplicate or discard a fill or stroke, and parent strokes across animated,
+  duplicate or discard a fill or stroke (except the shared rotating-path fill above), and parent strokes across animated,
   scaled nested geometry; flatten the affected groups before exporting
 - partial group opacity across multiple draws or nested paint stacks that require
   atomic compositing; flatten or precompose the affected group before exporting

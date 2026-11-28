@@ -650,7 +650,7 @@ class LottieParser {
     List<LottieGroup> flattenedGroups, {
     required String path,
   }) {
-    if (!_requiresAnimatedNestedFlattening(root)) return;
+    if (!_requiresAnimatedNestedFlattening(root) || root.rotatingChildWithSharedFill != null) return;
 
     for (final paint in _nestedPaints(root)) {
       final occurrences = flattenedGroups.expand((group) => group.items).where((item) => identical(item, paint)).length;

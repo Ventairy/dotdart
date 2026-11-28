@@ -22,6 +22,8 @@ The path geometry example uses `$Lotties.pathMorph` with continuous playback.
 Its vertices and Bézier handles animate directly in the generated painter;
 it does not load or parse the source JSON at runtime.
 
+The rotating cutout example, `$Lotties.rotatingCutout(width: 64)`, shows two paths sharing an even-odd fill. The overlap stays transparent as one path turns.
+
 ## Lookup by filename
 
 The example also renders an SVG through
